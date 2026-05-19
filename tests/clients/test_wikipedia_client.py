@@ -6,6 +6,7 @@ from roguepedia.clients.wikipedia_client import WikipediaClient
 def test_get_summary_returns_summary_payload():
     def handler(request: httpx.Request) -> httpx.Response:
         assert str(request.url).endswith("/page/summary/Nikola%20Tesla")
+        assert "Roguepedia" in request.headers["user-agent"]
         return httpx.Response(
             200,
             json={

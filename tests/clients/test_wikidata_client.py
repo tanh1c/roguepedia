@@ -6,6 +6,7 @@ from roguepedia.clients.wikidata_client import WikidataClient
 def test_search_entities_returns_results():
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.params["action"] == "wbsearchentities"
+        assert "Roguepedia" in request.headers["user-agent"]
         return httpx.Response(
             200,
             json={

@@ -5,6 +5,8 @@ import httpx
 
 from roguepedia.config import settings
 
+USER_AGENT = "Roguepedia/0.1.0 (https://example.invalid/roguepedia; local-dev@example.invalid)"
+
 
 @dataclass(frozen=True)
 class WikidataSearchResult:
@@ -18,6 +20,7 @@ class WikidataClient:
     def __init__(self, http_client: httpx.Client | None = None, api_url: str | None = None) -> None:
         self.http_client = http_client or httpx.Client(timeout=20.0)
         self.api_url = api_url or settings.wikidata_api_url
+        self.headers = {"User-Agent": USER_AGENT}
 
     def search_entities(self, query: str, language: str = "en", limit: int = 5) -> list[WikidataSearchResult]:
         response = self.http_client.get(
@@ -29,6 +32,7 @@ class WikidataClient:
                 "format": "json",
                 "limit": limit,
             },
+            headers=self.headers,
         )
         response.raise_for_status()
         payload = response.json()
@@ -44,6 +48,7 @@ class WikidataClient:
                 "props": "labels|descriptions|aliases|claims|sitelinks",
                 "format": "json",
             },
+            headers=self.headers,
         )
         response.raise_for_status()
         payload = response.json()
