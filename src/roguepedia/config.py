@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     wikidata_sparql_url: str = "https://query.wikidata.org/sparql"
     wikipedia_api_base: str = "https://en.wikipedia.org/api/rest_v1"
     allow_living_people: bool = False
+    llm_provider: str = "none"
+    llm_model: str = ""
+    llm_api_key: str = ""
     max_batch_size: int = 100
     cache_ttl_days: int = 30
 

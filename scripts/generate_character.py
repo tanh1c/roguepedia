@@ -19,6 +19,16 @@ def should_generate_cards(*, no_llm: bool, with_cards: bool) -> bool:
     return no_llm and with_cards
 
 
+def generation_mode(*, no_llm: bool, with_cards: bool, llm_provider: str) -> str:
+    if no_llm and with_cards:
+        return "no_llm_with_cards"
+    if no_llm:
+        return "no_llm"
+    if llm_provider == "none":
+        return "deterministic_fallback"
+    return "llm"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a Roguepedia game character")
     parser.add_argument("name", help="Entity name to search")
@@ -27,14 +37,15 @@ def main() -> None:
     parser.add_argument("--with-cards", action="store_true", help="Include deterministic template cards")
     args = parser.parse_args()
 
-    if not args.no_llm:
-        raise SystemExit("Only --no-llm generation is implemented")
+    mode = generation_mode(no_llm=args.no_llm, with_cards=args.with_cards, llm_provider=settings.llm_provider)
 
     collector = RawEntityCollector()
     result = collector.collect_by_name(args.name, language=args.language)
     profile = normalize_entity_profile(result.wikidata, result.wikipedia.raw if result.wikipedia else None)
-    if should_generate_cards(no_llm=args.no_llm, with_cards=args.with_cards):
+    if mode in {"no_llm_with_cards", "deterministic_fallback"}:
         character = assemble_no_llm_character_with_cards(profile)
+        if mode == "deterministic_fallback":
+            character.generation_metadata["fallback_reason"] = "llm_provider_not_configured"
     else:
         character = assemble_no_llm_character(profile)
     path = generated_character_path(settings.data_dir, character.id)
@@ -48,6 +59,7 @@ def main() -> None:
     print(f"Rarity: {character.rarity} ({character.rarity_score:.1f})")
     print(f"Tags: {', '.join(character.tags)}")
     print(f"Cards: {len(character.cards)}")
+    print(f"Mode: {mode}")
     print(f"Saved: {path}")
 
 
