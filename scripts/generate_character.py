@@ -7,7 +7,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from roguepedia.collectors.entity_collector import RawEntityCollector
 from roguepedia.config import settings
 from roguepedia.generation.character_assembler import assemble_no_llm_character, assemble_no_llm_character_with_cards
+from roguepedia.generation.deepseek_client import DeepSeekClient
+from roguepedia.generation.llm_retry import generate_with_repair
 from roguepedia.normalizers.profile_normalizer import normalize_entity_profile
+from roguepedia.validation.card_package_validator import apply_card_package
 from roguepedia.storage.json_store import write_json
 
 
@@ -29,6 +32,14 @@ def generation_mode(*, no_llm: bool, with_cards: bool, llm_provider: str) -> str
     return "llm"
 
 
+def make_llm_client(*, llm_provider: str, api_key: str, model: str):
+    if llm_provider != "deepseek":
+        raise ValueError(f"Unsupported LLM_PROVIDER: {llm_provider}")
+    if not api_key:
+        raise ValueError("DEEPSEEK_API_KEY is required when LLM_PROVIDER=deepseek")
+    return DeepSeekClient(api_key=api_key, model=model or "deepseek-v4-flash")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a Roguepedia game character")
     parser.add_argument("name", help="Entity name to search")
@@ -46,6 +57,15 @@ def main() -> None:
         character = assemble_no_llm_character_with_cards(profile)
         if mode == "deterministic_fallback":
             character.generation_metadata["fallback_reason"] = "llm_provider_not_configured"
+    elif mode == "llm":
+        base_character = assemble_no_llm_character(profile)
+        client = make_llm_client(
+            llm_provider=settings.llm_provider,
+            api_key=settings.llm_api_key,
+            model=settings.llm_model or "deepseek-v4-flash",
+        )
+        package = generate_with_repair(client, base_character, max_attempts=2)
+        character = apply_card_package(base_character, package, fallback=True)
     else:
         character = assemble_no_llm_character(profile)
     path = generated_character_path(settings.data_dir, character.id)
