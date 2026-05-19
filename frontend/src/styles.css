@@ -25,3 +25,62 @@ button {
 button:disabled {
   cursor: not-allowed;
 }
+
+.pixel-art {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.pixel-panel {
+  border: 16px solid transparent;
+  border-image: url('/assets/ui/pixel-panel.svg') 16 fill stretch;
+  image-rendering: pixelated;
+}
+
+.pixel-dark-panel {
+  border: 16px solid transparent;
+  border-image: url('/assets/ui/pixel-dark-panel.svg') 16 fill stretch;
+  image-rendering: pixelated;
+}
+
+.pixel-button {
+  border: 12px solid transparent;
+  border-image: url('/assets/ui/pixel-button.svg') 12 fill stretch;
+  image-rendering: pixelated;
+}
+
+.pixel-card-attack {
+  border: 18px solid transparent;
+  border-image: url('/assets/ui/pixel-card-attack.svg') 18 fill stretch;
+  image-rendering: pixelated;
+}
+
+.pixel-card-skill {
+  border: 18px solid transparent;
+  border-image: url('/assets/ui/pixel-card-skill.svg') 18 fill stretch;
+  image-rendering: pixelated;
+}
+
+.pixel-scrollbar {
+  scrollbar-color: #D4AF37 #0B1120;
+  scrollbar-width: thin;
+}
+
+.pixel-scrollbar::-webkit-scrollbar {
+  height: 14px;
+}
+
+.pixel-scrollbar::-webkit-scrollbar-track {
+  background: #0B1120;
+  border: 3px solid #0B1120;
+}
+
+.pixel-scrollbar::-webkit-scrollbar-thumb {
+  background: #D4AF37;
+  border: 3px solid #0B1120;
+  box-shadow: inset 0 0 0 2px #F6E8C9;
+}
+
+.pixel-scrollbar::-webkit-scrollbar-button {
+  display: none;
+}

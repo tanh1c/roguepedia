@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import {
   Archive,
   Book,
@@ -278,7 +278,7 @@ function HeaderStat({ icon, label, value }: { icon: ReactNode; label: string; va
 }
 
 function HeaderButton({ icon, label, disabled, onClick }: { icon: ReactNode; label: string; disabled?: boolean; onClick: () => void }) {
-  return <button className="flex items-center gap-2 border-4 border-[#0B1120] bg-white px-4 py-2 text-sm font-black shadow-[3px_3px_0_#D4AF37] transition hover:-translate-y-0.5 hover:bg-[#F6E8C9] active:translate-y-0.5 disabled:opacity-40" disabled={disabled} onClick={onClick}>{icon} {label}</button>;
+  return <button className="pixel-button flex items-center gap-2 px-4 py-2 text-sm font-black transition hover:-translate-y-0.5 active:translate-y-0.5 disabled:opacity-40" disabled={disabled} onClick={onClick}>{icon} {label}</button>;
 }
 
 function MapPanel({ run, onChooseNode }: { run: ReturnType<typeof createInitialRunState>; onChooseNode: (nodeId: string) => void }) {
@@ -438,14 +438,13 @@ function RightPanel({ character, combat, phase, primaryDisabled, run, showTutori
 
   return (
     <div className="w-[340px] flex-shrink-0 bg-[#F5F2EB] flex flex-col border-l-4 border-[#0B1120]">
-      <CombatControlPanel energy={energy} logs={logs} maxEnergy={maxEnergy} onPrimaryAction={onPrimaryAction} primaryDisabled={primaryDisabled} primaryLabel={primaryLabel} />
       <div className="flex h-16 border-b border-[#E0DACE] bg-[#1F2937] text-gray-400">
         <Tab active={activeTab === 'hint'} icon={<HelpCircle className="w-5 h-5" />} label="Hint" onClick={() => setActiveTab('hint')} />
         <Tab active={activeTab === 'artifacts'} icon={<Archive className="w-5 h-5" />} label="Artifacts" onClick={() => setActiveTab('artifacts')} />
         <Tab active={activeTab === 'synergies'} icon={<Sparkles className="w-5 h-5" />} label="Synergies" onClick={() => setActiveTab('synergies')} />
         <Tab active={activeTab === 'lore'} icon={<BookOpen className="w-5 h-5" />} label="Lore" onClick={() => setActiveTab('lore')} />
       </div>
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 flex flex-col gap-4">
         {activeTab === 'hint' ? (
           <>
             {showTutorial ? <InfoCard title="Tutorial Hint" icon={<GraduationCap className="w-5 h-5 text-[#1c2a38]" />} body="Choose a glowing map node, play affordable cards, then end turn. Gold actions are the next safe step." /> : null}
@@ -479,6 +478,7 @@ function RightPanel({ character, combat, phase, primaryDisabled, run, showTutori
         ) : null}
         {activeTab === 'lore' ? <CharacterSheet character={character} /> : null}
       </div>
+      <CombatControlPanel energy={energy} logs={logs} maxEnergy={maxEnergy} onPrimaryAction={onPrimaryAction} primaryDisabled={primaryDisabled} primaryLabel={primaryLabel} />
     </div>
   );
 }
@@ -515,11 +515,11 @@ function Tab({ active, icon, label, onClick }: { active?: boolean; icon: ReactNo
 }
 
 function Panel({ title, children, action, actionLabel }: { title: string; children: ReactNode; action?: () => void; actionLabel?: string }) {
-  return <div className="bg-[#FAF9F5] border-4 border-[#0B1120] p-4 shadow-[4px_4px_0_#D4AF37] flex flex-col"><div className="flex items-center justify-between mb-3"><h3 className="font-serif font-black text-[#1c2a38] text-lg">{title}</h3>{action ? <button className="border-2 border-[#0B1120] bg-[#F6E8C9] px-2 py-1 text-xs font-black text-[#1c2a38] shadow-[2px_2px_0_#D4AF37]" onClick={action}>{actionLabel}</button> : null}</div>{children}</div>;
+  return <div className="pixel-panel flex flex-col p-3"><div className="flex items-center justify-between mb-3"><h3 className="font-serif font-black text-[#1c2a38] text-lg">{title}</h3>{action ? <button className="pixel-button px-2 py-1 text-xs font-black text-[#1c2a38]" onClick={action}>{actionLabel}</button> : null}</div>{children}</div>;
 }
 
 function InfoCard({ title, icon, body }: { title: string; icon: ReactNode; body: string }) {
-  return <div className="bg-[#FAF9F5] border-4 border-[#0B1120] p-4 shadow-[4px_4px_0_#D4AF37] flex flex-col"><div className="flex items-center gap-2 mb-3">{icon}<h3 className="font-serif font-black text-[#1c2a38] text-lg">{title}</h3></div><p className="text-sm text-[#4A5568] leading-relaxed mb-4">{body}</p><div className="flex justify-between items-center text-gray-500 mt-auto"><span className="text-xs font-mono">(1 / 7)</span><div className="flex gap-2"><button className="border-2 border-[#0B1120] p-1 opacity-30"><ChevronLeft className="w-4 h-4" /></button><button className="border-2 border-[#0B1120] p-1 hover:bg-[#F6E8C9]"><ChevronRight className="w-4 h-4" /></button></div></div></div>;
+  return <div className="pixel-panel flex flex-col p-3"><div className="flex items-center gap-2 mb-3">{icon}<h3 className="font-serif font-black text-[#1c2a38] text-lg">{title}</h3></div><p className="text-sm text-[#4A5568] leading-relaxed mb-4">{body}</p><div className="flex justify-between items-center text-gray-500 mt-auto"><span className="text-xs font-mono">(1 / 7)</span><div className="flex gap-2"><button className="pixel-button p-1 opacity-30"><ChevronLeft className="w-4 h-4" /></button><button className="pixel-button p-1"><ChevronRight className="w-4 h-4" /></button></div></div></div>;
 }
 
 function CharacterSheet({ character }: { character: typeof runtimeRoster[number] }) {
@@ -720,7 +720,9 @@ function CenterPanel({ combat, currentCharacter, hand, livingEnemyCount, selecte
   const enemyHp = selectedEnemy ? `${selectedEnemy.hp} / ${selectedEnemy.maxHp}` : 'Awaiting battle';
   const [inspectedEnemyId, setInspectedEnemyId] = useState<string | null>(null);
   const [inspectingPlayer, setInspectingPlayer] = useState(false);
+  const handScrollerRef = useRef<HTMLDivElement>(null);
   const inspectedEnemy = combat?.enemies.find((enemy) => enemy.id === inspectedEnemyId) ?? null;
+  const slideHand = (direction: -1 | 1) => handScrollerRef.current?.scrollBy({ left: direction * 360, behavior: 'smooth' });
 
   return (
     <div className="flex-1 min-w-0 flex flex-col relative bg-[#1E2530] overflow-hidden shadow-inner font-sans">
@@ -729,8 +731,8 @@ function CenterPanel({ combat, currentCharacter, hand, livingEnemyCount, selecte
       <div className="absolute bottom-0 w-full h-[340px] bg-gradient-to-t from-[rgba(15,23,42,1)] via-[rgba(15,23,42,0.88)] to-transparent z-10 pointer-events-none"></div>
       <GameplayFrame />
       <div className="relative z-20 grid h-full min-h-0 grid-rows-[minmax(260px,1fr)_310px] gap-3 px-12 pb-4 pt-12 overflow-hidden">
-        <div className="min-h-0 flex justify-between items-end gap-8 px-4 overflow-hidden">
-          <div className="relative" onMouseEnter={() => setInspectingPlayer(true)} onMouseLeave={() => setInspectingPlayer(false)}>
+        <div className="min-h-0 flex items-start justify-center gap-72 px-12 pt-14 overflow-visible">
+          <div className="relative flex" onMouseEnter={() => setInspectingPlayer(true)} onMouseLeave={() => setInspectingPlayer(false)}>
             <CombatantPanel
               align="left"
               block={player?.block ?? 0}
@@ -744,8 +746,7 @@ function CenterPanel({ combat, currentCharacter, hand, livingEnemyCount, selecte
             />
             {inspectingPlayer ? <PlayerIntelCard character={currentCharacter} player={player} /> : null}
           </div>
-          <div className="w-56 shrink-0"></div>
-          <div className="relative">
+          <div className="relative flex">
             <CombatantPanel
               align="right"
               block={selectedEnemy?.block ?? 0}
@@ -761,10 +762,12 @@ function CenterPanel({ combat, currentCharacter, hand, livingEnemyCount, selecte
           </div>
         </div>
         <div className="min-h-0 w-full z-30 flex flex-col justify-center items-center pb-1 relative overflow-visible">
-          <div className="w-full overflow-x-auto overflow-y-visible px-2 pb-2 pt-6">
-            <div className={`mx-auto flex w-max max-w-full justify-center gap-2 items-end ${settingsCompact ? 'scale-90 origin-bottom' : ''}`}>{hand.map((card, index) => <button className="disabled:cursor-not-allowed min-w-0" disabled={!combat || combat.phase !== 'player' || combat.energy < card.energy_cost || livingEnemyCount === 0} key={`${card.id}-${card.name}`} onClick={() => onPlayCard(card)}><CardItem card={card} disabled={!combat || combat.phase !== 'player' || combat.energy < card.energy_cost || livingEnemyCount === 0} image={cardArt[index % cardArt.length]} /></button>)}</div>
+          <button className="pixel-button absolute left-4 top-1/2 z-40 grid h-12 w-12 -translate-y-1/2 place-items-center px-0 py-0 font-mono text-2xl font-black leading-none text-[#111827] transition hover:-translate-y-[calc(50%+2px)] active:-translate-y-1/2" onClick={() => slideHand(-1)} type="button"><span className="-mt-1 block leading-none">&lt;</span></button>
+          <div ref={handScrollerRef} className="pixel-scrollbar absolute inset-x-20 top-0 bottom-8 overflow-x-auto overflow-y-visible scroll-smooth pt-6">
+            <div className={`mx-auto flex w-max min-w-full justify-center gap-2 items-end ${settingsCompact ? 'scale-90 origin-bottom' : ''}`}>{hand.map((card, index) => <button className="disabled:cursor-not-allowed min-w-0" disabled={!combat || combat.phase !== 'player' || combat.energy < card.energy_cost || livingEnemyCount === 0} key={`${card.id}-${card.name}`} onClick={() => onPlayCard(card)}><CardItem card={card} disabled={!combat || combat.phase !== 'player' || combat.energy < card.energy_cost || livingEnemyCount === 0} image={cardArt[index % cardArt.length]} /></button>)}</div>
           </div>
-          <div className="w-full text-center pointer-events-none mt-1 z-10"><p className="text-gray-400 text-sm tracking-widest uppercase">Play cards to use their effects.</p></div>
+          <button className="pixel-button absolute right-4 top-1/2 z-40 grid h-12 w-12 -translate-y-1/2 place-items-center px-0 py-0 font-mono text-2xl font-black leading-none text-[#111827] transition hover:-translate-y-[calc(50%+2px)] active:-translate-y-1/2" onClick={() => slideHand(1)} type="button"><span className="-mt-1 block leading-none">&gt;</span></button>
+          <div className="absolute inset-x-0 bottom-0 w-full text-center pointer-events-none z-10"><p className="text-gray-400 text-sm tracking-widest uppercase">Play cards to use their effects.</p></div>
         </div>
       </div>
       {combat?.enemies.length ? <div className="absolute right-8 top-16 z-30 flex justify-end gap-2">{combat.enemies.map((enemy) => <button className={`text-xs px-2 py-1 rounded border ${enemy.id === selectedEnemyId ? 'bg-[#D4AF37] border-[#8A6A4B]' : 'bg-white/70 border-gray-300'}`} disabled={enemy.hp <= 0} key={enemy.id} onClick={() => onSelectEnemy(enemy.id)}>{enemy.name}</button>)}</div> : null}
@@ -776,12 +779,6 @@ function GameplayBackdrop() {
   return (
     <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden bg-[#182033]">
       <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:24px_24px]"></div>
-      <div className="absolute left-[10%] top-[12%] h-[300px] w-[170px] border-4 border-[#111827] bg-[#2B2118] shadow-[8px_8px_0_#0B1120]"></div>
-      <div className="absolute right-[10%] top-[12%] h-[300px] w-[170px] border-4 border-[#111827] bg-[#2B2118] shadow-[8px_8px_0_#0B1120]"></div>
-      {Array.from({ length: 6 }).map((_, index) => <div className="absolute h-3 w-[132px] border-2 border-[#111827] bg-[#B89019]/70" key={index} style={{ left: 'calc(10% + 19px)', top: `${16 + index * 6}%` }}></div>)}
-      {Array.from({ length: 6 }).map((_, index) => <div className="absolute h-3 w-[132px] border-2 border-[#111827] bg-[#B89019]/70" key={index} style={{ right: 'calc(10% + 19px)', top: `${16 + index * 6}%` }}></div>)}
-      <div className="absolute left-1/2 top-[12%] h-[260px] w-[260px] -translate-x-1/2 border-4 border-[#111827] bg-[#243044] shadow-[8px_8px_0_#0B1120]"></div>
-      <div className="absolute left-1/2 top-[18%] h-[140px] w-[140px] -translate-x-1/2 border-4 border-[#D4AF37]/70 bg-[#111827]/45"></div>
       <div className="absolute bottom-0 left-0 h-[38%] w-full bg-[#111827]"></div>
       <div className="absolute bottom-[30%] left-1/2 h-5 w-[72%] -translate-x-1/2 border-2 border-[#0B1120] bg-[#4A3824]"></div>
       <div className="absolute bottom-[20%] left-1/2 h-4 w-[58%] -translate-x-1/2 border-2 border-[#0B1120] bg-[#3A2C20]"></div>
@@ -837,11 +834,7 @@ function CombatantPanel({ align, block, currentHp, hpLabel, imageUrl, inspectabl
             <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent"></div>
           </div>
         ) : (
-          <div className="absolute bottom-0 w-32 h-40 bg-[#BA9B53] border-4 border-[#5E4A28] rounded-full shadow-2xl flex flex-col items-center p-4">
-            <div className="w-12 h-12 bg-[#DED098] rounded-full border-4 border-[#5E4A28] flex items-center justify-center mt-2 relative"><div className="w-3 h-3 bg-red-600 rounded-full shadow-[0_0_8px_red]"></div></div>
-            <Shield className="w-16 h-16 text-[#8B6E38] fill-[#8B6E38] absolute -right-2 top-20" />
-            <div className="w-1 h-48 bg-gray-800 absolute -left-2 bottom-0"></div>
-          </div>
+          <PixelEnemySprite />
         )}
       </div>
       <div className="w-full text-center relative">
@@ -849,29 +842,72 @@ function CombatantPanel({ align, block, currentHp, hpLabel, imageUrl, inspectabl
         <HealthBar current={currentHp} max={maxHp} label={hpLabel} />
         <BlockBadge value={block} align={align} />
       </div>
-      {right ? <div className="flex justify-end items-center mt-3 mr-2"><div className="flex items-center gap-2 group relative"><div className="flex items-center"><Sword className="w-5 h-5 text-red-700" /><Sword className="w-5 h-5 text-red-700 -ml-2 rotate-90" style={{ transform: 'rotateY(180deg)' }} /><span className="font-bold text-lg text-red-800 ml-1">{Math.max(6, Math.floor(maxHp / 10))}</span></div><span className="text-sm font-medium text-gray-800 bg-white/60 px-2 py-0.5 rounded">Intends to attack</span></div></div> : null}
+      {right ? <div className="mt-3 flex justify-end"><PixelInfoBadge label="INTENT" tone="red" value={String(Math.max(6, Math.floor(maxHp / 10)))} /></div> : null}
     </button>
+  );
+}
+
+function PixelEnemySprite() {
+  return (
+    <svg className="absolute bottom-0 h-40 w-36 pixel-art drop-shadow-[6px_6px_0_#0B1120]" viewBox="0 0 144 160" shapeRendering="crispEdges" aria-hidden="true">
+      <rect x="54" y="8" width="36" height="12" fill="#0B1120" />
+      <rect x="42" y="20" width="60" height="12" fill="#0B1120" />
+      <rect x="30" y="32" width="84" height="24" fill="#0B1120" />
+      <rect x="42" y="20" width="48" height="12" fill="#D4AF37" />
+      <rect x="42" y="32" width="60" height="24" fill="#BA9B53" />
+      <rect x="54" y="44" width="12" height="12" fill="#EF4444" />
+      <rect x="78" y="44" width="12" height="12" fill="#EF4444" />
+      <rect x="42" y="56" width="60" height="12" fill="#5E4A28" />
+      <rect x="30" y="68" width="84" height="48" fill="#0B1120" />
+      <rect x="42" y="68" width="60" height="48" fill="#8B6E38" />
+      <rect x="54" y="80" width="36" height="24" fill="#D4AF37" />
+      <rect x="18" y="76" width="24" height="52" fill="#0B1120" />
+      <rect x="102" y="76" width="24" height="52" fill="#0B1120" />
+      <rect x="18" y="88" width="24" height="28" fill="#6B4F2A" />
+      <rect x="102" y="88" width="24" height="28" fill="#6B4F2A" />
+      <rect x="30" y="116" width="24" height="28" fill="#0B1120" />
+      <rect x="90" y="116" width="24" height="28" fill="#0B1120" />
+      <rect x="34" y="116" width="16" height="28" fill="#3B2B13" />
+      <rect x="94" y="116" width="16" height="28" fill="#3B2B13" />
+      <rect x="12" y="128" width="42" height="12" fill="#0B1120" />
+      <rect x="90" y="128" width="42" height="12" fill="#0B1120" />
+      <rect x="12" y="140" width="42" height="8" fill="#6B4F2A" />
+      <rect x="90" y="140" width="42" height="8" fill="#6B4F2A" />
+      <rect x="116" y="42" width="8" height="86" fill="#0B1120" />
+      <rect x="124" y="50" width="8" height="78" fill="#D4AF37" />
+      <rect x="108" y="34" width="32" height="16" fill="#0B1120" />
+      <rect x="112" y="38" width="24" height="8" fill="#EF4444" />
+    </svg>
   );
 }
 
 function BlockBadge({ value, align }: { value: number; align: 'left' | 'right' }) {
   return (
-    <div className={`mt-1 flex items-center gap-1.5 ${align === 'right' ? 'justify-end' : 'justify-start'}`}>
-      <div className="relative h-7 w-7 text-blue-600 drop-shadow-[0_0_6px_rgba(37,99,235,0.55)]">
-        <svg viewBox="0 0 32 36" className="h-full w-full" aria-hidden="true">
-          <path d="M16 2.5 28 7v10.5C28 25.5 23.2 31 16 34 8.8 31 4 25.5 4 17.5V7l12-4.5Z" fill="#2563EB" stroke="#FDFBF8" strokeWidth="2" />
-          <path d="M16 6.5 24.5 9.7v7.7c0 5.6-3.1 9.7-8.5 12.3-5.4-2.6-8.5-6.7-8.5-12.3V9.7L16 6.5Z" fill="#1D4ED8" opacity="0.85" />
-        </svg>
-        <span className="absolute inset-0 grid place-items-center text-[11px] font-black text-white">{value}</span>
-      </div>
-      <span className="rounded bg-white/55 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-widest text-blue-900">Block</span>
+    <div className={`mt-2 flex ${align === 'right' ? 'justify-end' : 'justify-start'}`}>
+      <PixelInfoBadge label="BLK" tone="blue" value={String(value)} />
     </div>
   );
 }
 
 function HealthBar({ current, max, label }: { current: number; max: number; label: string }) {
   const pct = Math.max(0, Math.min(100, (current / max) * 100));
-  return <div className="relative w-full h-5 bg-[#2D2D2D] rounded flex overflow-hidden border-2 border-gray-900"><div className="h-full bg-[#E53E3E]" style={{ width: `${pct}%` }}></div><div className="absolute inset-0 flex items-center justify-center text-white text-[11px] font-bold tracking-wide drop-shadow-md">{label}</div></div>;
+  return (
+    <div className="relative h-6 w-full border-4 border-[#0B1120] bg-[#2D2D2D] shadow-[3px_3px_0_#0F172A]">
+      <div className="h-full bg-[#B23A2E]" style={{ width: `${pct}%` }}></div>
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.12)_1px,transparent_1px)] bg-[size:8px_8px]"></div>
+      <div className="absolute inset-0 grid place-items-center font-mono text-[11px] font-black tracking-wide text-white [text-shadow:2px_2px_0_#111827]">{label}</div>
+    </div>
+  );
+}
+
+function PixelInfoBadge({ label, tone, value }: { label: string; tone: 'blue' | 'red'; value: string }) {
+  const fill = tone === 'blue' ? 'bg-[#2563EB]' : 'bg-[#B23A2E]';
+  return (
+    <div className="flex items-center border-4 border-[#0B1120] bg-[#F6E8C9] shadow-[3px_3px_0_#0F172A]">
+      <span className={`grid h-7 min-w-8 place-items-center border-r-4 border-[#0B1120] px-1 font-mono text-sm font-black text-white [text-shadow:2px_2px_0_#111827] ${fill}`}>{value}</span>
+      <span className="px-2 font-mono text-[9px] font-black uppercase tracking-[0.16em] text-[#111827]">{label}</span>
+    </div>
+  );
 }
 
 function CardItem({ card, image, disabled }: { card: RuntimeCard; image: ReactNode; disabled?: boolean }) {
@@ -881,7 +917,7 @@ function CardItem({ card, image, disabled }: { card: RuntimeCard; image: ReactNo
   const cardBg = isRed ? 'bg-[#F2D6C9]' : 'bg-[#D7E7E4]';
   return (
     <div className={`relative w-[168px] h-[236px] flex-shrink-0 transition-transform duration-200 ${disabled ? 'opacity-90 translate-y-2' : 'hover:-translate-y-4 cursor-pointer opacity-100 z-10 hover:z-20'}`}>
-      <div className={`absolute inset-0 ${cardBg} border-4 ${borderColor} shadow-[6px_6px_0_#0F172A] overflow-hidden flex flex-col p-1.5`}><div className="absolute inset-2 border-2 border-white/35"></div><div className="relative z-10 text-center mb-1 mt-1"><h3 className="font-serif font-bold text-[16px] text-gray-950 leading-tight truncate px-2">{card.name}</h3><span className="font-mono text-[11px] font-black text-gray-700 uppercase tracking-widest">{card.card_type}</span></div><div className="relative z-10 w-full h-[72px] border-4 border-[#111827] bg-[#F6E8C9] mb-2 overflow-hidden flex flex-col items-center justify-center"><div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.04)_1px,transparent_1px),linear-gradient(rgba(0,0,0,0.04)_1px,transparent_1px)] bg-[size:8px_8px]"></div>{image}</div><div className="relative z-10 flex-1 flex items-center justify-center text-center px-2"><p className="text-[13.5px] text-gray-900 leading-snug font-bold line-clamp-4">{card.mechanics_text}</p></div></div>
+      <div className={`absolute inset-0 ${isRed ? 'pixel-card-attack' : 'pixel-card-skill'} shadow-[6px_6px_0_#0F172A] overflow-hidden flex flex-col p-1.5`}><div className="absolute inset-2 border-2 border-white/35"></div><div className="relative z-10 text-center mb-1 mt-1"><h3 className="font-serif font-bold text-[16px] text-gray-950 leading-tight truncate px-2">{card.name}</h3><span className="font-mono text-[11px] font-black text-gray-700 uppercase tracking-widest">{card.card_type}</span></div><div className="relative z-10 w-full h-[72px] border-4 border-[#111827] bg-[#F6E8C9] mb-2 overflow-hidden flex flex-col items-center justify-center"><div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,0,0,0.04)_1px,transparent_1px),linear-gradient(rgba(0,0,0,0.04)_1px,transparent_1px)] bg-[size:8px_8px]"></div>{image}</div><div className="relative z-10 flex-1 flex items-center justify-center text-center px-2"><p className="text-[13.5px] text-gray-900 leading-snug font-bold line-clamp-4">{card.mechanics_text}</p></div></div>
       <div className={`absolute -top-3 -left-3 w-10 h-10 border-4 border-[#111827] ${badgeBg} shadow-[3px_3px_0_#0F172A] flex items-center justify-center z-30`}><span className="text-white font-serif font-bold text-xl [text-shadow:2px_2px_0_#111827]">{card.energy_cost}</span></div>
       {disabled ? <div className="absolute inset-x-0 bottom-0 top-0 bg-black/60 z-40 rounded-xl flex items-end justify-center pb-4 backdrop-blur-[1px]"><div className="bg-black/80 px-2 py-1 rounded text-gray-200 text-xs flex items-center gap-1.5 pointer-events-none"><Save className="w-3 h-3" /><span>Not enough Energy</span></div></div> : null}
     </div>
