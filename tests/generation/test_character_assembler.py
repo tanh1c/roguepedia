@@ -1,4 +1,4 @@
-from roguepedia.generation.character_assembler import assemble_no_llm_character
+from roguepedia.generation.character_assembler import assemble_no_llm_character, assemble_no_llm_character_with_cards
 from roguepedia.schemas.profile import EntityProfile, SourceInfo
 
 
@@ -66,3 +66,23 @@ def test_assembles_tardigrade_as_nature_survival_character():
     assert character.stats.defense >= 70
     assert "nature" in character.tags
     assert "survival" in character.tags
+
+
+def test_assembles_character_with_executable_cards_and_passive():
+    profile = make_profile(
+        id="Q5194",
+        name="Tardigrade",
+        entity_type="organism",
+        description="phylum of animals",
+        wikipedia_summary="Tardigrades are water bears and moss piglets.",
+        claims_count=80,
+        sitelinks_count=60,
+    )
+
+    character = assemble_no_llm_character_with_cards(profile)
+
+    assert len(character.cards) >= 5
+    assert character.passive_trait is not None
+    assert character.validation.mechanics_valid is True
+    assert character.validation.balance_valid is True
+    assert character.generation_metadata["cards_generated"] is True

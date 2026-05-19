@@ -5,6 +5,7 @@ from roguepedia.engines.rarity_engine import infer_rarity
 from roguepedia.engines.role_engine import infer_role
 from roguepedia.engines.stat_engine import infer_stats
 from roguepedia.engines.tag_engine import infer_tags
+from roguepedia.generation.card_templates import build_template_cards, build_template_passive
 from roguepedia.schemas.character import GameCharacter, ValidationReport
 from roguepedia.schemas.evidence import EvidenceResult
 from roguepedia.schemas.profile import EntityProfile
@@ -54,6 +55,7 @@ def assemble_no_llm_character(profile: EntityProfile) -> GameCharacter:
         validation=ValidationReport(schema_valid=True, grounded=True, safety_valid=not profile.is_living_person_candidate),
         generation_metadata={
             "llm_used": False,
+            "cards_generated": False,
             "evidence": {
                 "era": evidence_payload(era),
                 "domain": evidence_payload(domain),
@@ -63,3 +65,30 @@ def assemble_no_llm_character(profile: EntityProfile) -> GameCharacter:
             },
         },
     )
+
+
+def assemble_no_llm_character_with_cards(profile: EntityProfile) -> GameCharacter:
+    character = assemble_no_llm_character(profile)
+    cards = build_template_cards(
+        character_id=character.id,
+        character_name=character.name,
+        domain=character.domain,
+        character_class=character.character_class,
+        role=character.role,
+        stats=character.stats,
+        grounding_keywords=character.tags,
+    )
+    passive = build_template_passive(
+        character_id=character.id,
+        character_name=character.name,
+        domain=character.domain,
+        character_class=character.character_class,
+        role=character.role,
+        grounding_keywords=character.tags,
+    )
+    character.cards = cards
+    character.passive_trait = passive
+    character.validation.mechanics_valid = True
+    character.validation.balance_valid = True
+    character.generation_metadata["cards_generated"] = True
+    return character
