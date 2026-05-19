@@ -75,12 +75,17 @@ def valid_package_json() -> str:
     )
 
 
-def test_prompt_lists_allowed_mechanics_and_character_context():
+def test_prompt_lists_allowed_schema_values_and_character_context():
     prompt = build_card_generation_prompt(make_character())
 
     assert "Nikola Tesla" in prompt
     assert "Allowed mechanic kinds" in prompt
     assert "damage" in prompt
+    assert "Allowed targets" in prompt
+    assert "selected_enemy" in prompt
+    assert "Allowed card rarities" in prompt
+    assert "signature" in prompt
+    assert '"grounding": {"inspired_by": "Nikola Tesla", "grounding_keywords": ["science"]}' in prompt
     assert "Return JSON only" in prompt
 
 

@@ -40,6 +40,10 @@ def make_llm_client(*, llm_provider: str, api_key: str, model: str):
     return DeepSeekClient(api_key=api_key, model=model or "deepseek-v4-flash")
 
 
+def should_fallback_after_llm_error(error: Exception) -> bool:
+    return isinstance(error, ValueError)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a Roguepedia game character")
     parser.add_argument("name", help="Entity name to search")
@@ -64,8 +68,14 @@ def main() -> None:
             api_key=settings.llm_api_key,
             model=settings.llm_model or "deepseek-v4-flash",
         )
-        package = generate_with_repair(client, base_character, max_attempts=2)
-        character = apply_card_package(base_character, package, fallback=True)
+        try:
+            package = generate_with_repair(client, base_character, max_attempts=2)
+            character = apply_card_package(base_character, package, fallback=True)
+        except Exception as exc:
+            if not should_fallback_after_llm_error(exc):
+                raise
+            character = assemble_no_llm_character_with_cards(profile)
+            character.generation_metadata["fallback_reason"] = "llm_error"
     else:
         character = assemble_no_llm_character(profile)
     path = generated_character_path(settings.data_dir, character.id)

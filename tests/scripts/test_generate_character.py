@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from scripts.generate_character import generation_mode, generated_character_path, make_llm_client, should_generate_cards
+from scripts.generate_character import generation_mode, generated_character_path, make_llm_client, should_generate_cards, should_fallback_after_llm_error
 
 
 def test_generated_character_path_uses_qid_filename(tmp_path: Path):
@@ -32,3 +32,7 @@ def test_make_llm_client_rejects_missing_deepseek_key():
         assert str(exc) == "DEEPSEEK_API_KEY is required when LLM_PROVIDER=deepseek"
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_should_fallback_after_llm_error_for_validation_failures():
+    assert should_fallback_after_llm_error(ValueError("Invalid card package")) is True
