@@ -34,6 +34,24 @@ class WikidataClient:
         payload = response.json()
         return [self._parse_search_result(item) for item in payload.get("search", [])]
 
+    def get_entity(self, qid: str, language: str = "en") -> dict[str, Any]:
+        response = self.http_client.get(
+            self.api_url,
+            params={
+                "action": "wbgetentities",
+                "ids": qid,
+                "languages": language,
+                "props": "labels|descriptions|aliases|claims|sitelinks",
+                "format": "json",
+            },
+        )
+        response.raise_for_status()
+        payload = response.json()
+        entity = payload.get("entities", {}).get(qid)
+        if not entity or "missing" in entity:
+            raise ValueError(f"Wikidata entity not found: {qid}")
+        return entity
+
     def _parse_search_result(self, item: dict[str, Any]) -> WikidataSearchResult:
         qid = item["id"]
         return WikidataSearchResult(
