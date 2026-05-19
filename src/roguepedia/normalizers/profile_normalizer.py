@@ -33,7 +33,7 @@ def normalize_entity_profile(wikidata: dict[str, Any], wikipedia: dict[str, Any]
 
     return EntityProfile(
         id=qid,
-        name=english_label(wikidata) or qid,
+        name=english_label(wikidata) or wiki_title or qid,
         description=english_description(wikidata),
         entity_type=entity_type,
         source=source,

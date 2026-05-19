@@ -46,3 +46,21 @@ def test_flags_living_human_candidate():
     profile = normalize_entity_profile(wikidata, None)
 
     assert profile.is_living_person_candidate is True
+
+
+def test_uses_wikipedia_sitelink_title_when_english_label_is_missing():
+    wikidata = {
+        "id": "Q7186",
+        "labels": {},
+        "descriptions": {"en": {"value": "Polish-French physicist and chemist"}},
+        "claims": {
+            "P31": [{"mainsnak": {"datavalue": {"value": {"id": "Q5"}}}}],
+            "P569": [{"mainsnak": {"datavalue": {"value": {"time": "+1867-11-07T00:00:00Z"}}}}],
+            "P570": [{"mainsnak": {"datavalue": {"value": {"time": "+1934-07-04T00:00:00Z"}}}}],
+        },
+        "sitelinks": {"enwiki": {"title": "Marie Curie"}},
+    }
+
+    profile = normalize_entity_profile(wikidata, None)
+
+    assert profile.name == "Marie Curie"
