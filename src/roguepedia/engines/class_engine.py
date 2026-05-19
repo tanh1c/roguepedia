@@ -10,6 +10,13 @@ CLASS_KEYWORDS = {
 
 
 def infer_character_class(profile: EntityProfile) -> EvidenceResult:
+    if profile.entity_type == "organism":
+        return EvidenceResult(
+            value="survivor",
+            score=1.0,
+            evidence=[EvidenceItem(field="entity_type", matched="organism", weight=1.0)],
+        )
+
     text = profile.source_text().lower()
     for character_class, keywords in CLASS_KEYWORDS.items():
         matched = [keyword for keyword in keywords if keyword in text]

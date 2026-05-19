@@ -88,14 +88,14 @@ def test_infers_survivor_class_for_resilient_organism():
     profile = make_profile(
         name="Tardigrade",
         entity_type="organism",
-        description="resilient microscopic animal",
-        wikipedia_summary="Tardigrades survive extreme temperature, radiation, and dehydration.",
+        description="phylum of animals",
+        wikipedia_summary="Tardigrades are water bears and moss piglets.",
     )
 
     result = infer_character_class(profile)
 
     assert result.value == "survivor"
-    assert any(e.field == "source_text" for e in result.evidence)
+    assert any(e.field == "entity_type" for e in result.evidence)
 
 
 def test_infers_control_role_for_strategy_profile():
@@ -107,13 +107,13 @@ def test_infers_control_role_for_strategy_profile():
     assert result.evidence
 
 
-def test_infers_tank_role_for_survival_profile():
-    profile = make_profile(description="resilient animal", wikipedia_summary="Survives extreme radiation and dehydration.")
+def test_infers_tank_role_for_organism_profile():
+    profile = make_profile(entity_type="organism", description="phylum of animals")
 
     result = infer_role(profile)
 
     assert result.value == "tank"
-    assert result.evidence
+    assert any(e.field == "entity_type" for e in result.evidence)
 
 
 def test_rarity_scales_with_source_coverage():

@@ -40,7 +40,7 @@ class GameCharacter(BaseModel):
     stats: CharacterStats
     tags: list[str]
     cards: list[Card]
-    passive_trait: PassiveTrait
+    passive_trait: PassiveTrait | None = None
 
     lore: str
     short_lore: str
