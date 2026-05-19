@@ -1,0 +1,48 @@
+from roguepedia.normalizers.profile_normalizer import normalize_entity_profile
+
+
+def test_normalizes_human_profile_from_raw_payloads():
+    wikidata = {
+        "id": "Q9036",
+        "labels": {"en": {"value": "Nikola Tesla"}},
+        "descriptions": {"en": {"value": "inventor and engineer"}},
+        "aliases": {"en": [{"value": "Tesla"}]},
+        "claims": {
+            "P31": [{"mainsnak": {"datavalue": {"value": {"id": "Q5"}}}}],
+            "P569": [{"mainsnak": {"datavalue": {"value": {"time": "+1856-07-10T00:00:00Z"}}}}],
+            "P570": [{"mainsnak": {"datavalue": {"value": {"time": "+1943-01-07T00:00:00Z"}}}}],
+        },
+        "sitelinks": {"enwiki": {"title": "Nikola Tesla"}},
+    }
+    wikipedia = {
+        "title": "Nikola Tesla",
+        "extract": "Nikola Tesla was an inventor and electrical engineer.",
+        "content_urls": {"desktop": {"page": "https://en.wikipedia.org/wiki/Nikola_Tesla"}},
+        "thumbnail": {"source": "https://example.test/tesla.jpg"},
+    }
+
+    profile = normalize_entity_profile(wikidata, wikipedia)
+
+    assert profile.id == "Q9036"
+    assert profile.name == "Nikola Tesla"
+    assert profile.entity_type == "human"
+    assert profile.birth_year == 1856
+    assert profile.death_year == 1943
+    assert profile.source.wikipedia_title == "Nikola Tesla"
+    assert profile.is_living_person_candidate is False
+
+
+def test_flags_living_human_candidate():
+    wikidata = {
+        "id": "Q42",
+        "labels": {"en": {"value": "Example Person"}},
+        "claims": {
+            "P31": [{"mainsnak": {"datavalue": {"value": {"id": "Q5"}}}}],
+            "P569": [{"mainsnak": {"datavalue": {"value": {"time": "+1980-01-01T00:00:00Z"}}}}],
+        },
+        "sitelinks": {},
+    }
+
+    profile = normalize_entity_profile(wikidata, None)
+
+    assert profile.is_living_person_candidate is True
