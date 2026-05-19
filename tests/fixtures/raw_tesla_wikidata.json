@@ -1,0 +1,60 @@
+{
+  "id": "Q9036",
+  "labels": {
+    "en": {
+      "value": "Nikola Tesla"
+    }
+  },
+  "descriptions": {
+    "en": {
+      "value": "Serbian-American inventor and electrical engineer"
+    }
+  },
+  "aliases": {
+    "en": [
+      {
+        "value": "Tesla"
+      }
+    ]
+  },
+  "claims": {
+    "P31": [
+      {
+        "mainsnak": {
+          "datavalue": {
+            "value": {
+              "id": "Q5"
+            }
+          }
+        }
+      }
+    ],
+    "P569": [
+      {
+        "mainsnak": {
+          "datavalue": {
+            "value": {
+              "time": "+1856-07-10T00:00:00Z"
+            }
+          }
+        }
+      }
+    ],
+    "P570": [
+      {
+        "mainsnak": {
+          "datavalue": {
+            "value": {
+              "time": "+1943-01-07T00:00:00Z"
+            }
+          }
+        }
+      }
+    ]
+  },
+  "sitelinks": {
+    "enwiki": {
+      "title": "Nikola Tesla"
+    }
+  }
+}

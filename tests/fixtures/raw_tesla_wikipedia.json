@@ -1,0 +1,12 @@
+{
+  "title": "Nikola Tesla",
+  "extract": "Nikola Tesla was a Serbian-American inventor and electrical engineer.",
+  "content_urls": {
+    "desktop": {
+      "page": "https://en.wikipedia.org/wiki/Nikola_Tesla"
+    }
+  },
+  "thumbnail": {
+    "source": "https://example.test/tesla.jpg"
+  }
+}
