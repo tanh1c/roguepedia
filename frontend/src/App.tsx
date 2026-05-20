@@ -26,10 +26,10 @@ import {
 } from 'lucide-react';
 import { applyBattleReward, applyEventChoice, applyRestChoice, applySynergyRules, ARTIFACTS, EVENT_CHOICES } from './game/campaignContent';
 import { endPlayerTurn, playCard } from './game/combatEngine';
-import { claimBattleReward, chooseNode, completeNonBattleNode, createInitialRunState, isNodeAvailable, resetRun, type RunNodeType } from './game/runEngine';
+import { applyMajorStatUpgrade, claimBattleReward, chooseNode, completeNonBattleNode, createInitialRunState, effectiveStats, isNodeAvailable, progressForCharacter, resetRun, xpForNextLevel, type CharacterProgress, type CharacterStatKey, type RunNodeType } from './game/runEngine';
 import { runtimeRoster } from './game/roster';
 import { DEFAULT_SETTINGS, loadRunSnapshot, saveRunSnapshot, updateSettings } from './game/settings';
-import type { RuntimeCard } from './game/runtimeTypes';
+import type { CharacterRarity, RuntimeCard } from './game/runtimeTypes';
 
 const nodeIcons: Record<RunNodeType, ReactNode> = {
   battle: <Sword className="w-4 h-4" />,
@@ -57,7 +57,9 @@ export function App() {
   const [selectedEnemyId, setSelectedEnemyId] = useState(run.combat?.enemies[0]?.id);
   const [intelEnemyId, setIntelEnemyId] = useState<string | null>(null);
   const [openWindow, setOpenWindow] = useState<GameWindow>(null);
+  const [headerHidden, setHeaderHidden] = useState(false);
   const currentCharacter = run.party[0];
+  const pendingUpgradeCharacter = run.party.find((character) => progressForCharacter(run, character.id).pendingMajorUpgrade);
   const combat = run.combat;
   const livingEnemies = combat?.enemies.filter((enemy) => enemy.hp > 0) ?? [];
   const selectedEnemy = combat?.enemies.find((enemy) => enemy.id === selectedEnemyId) ?? combat?.enemies[0];
@@ -108,14 +110,16 @@ export function App() {
   };
 
   return (
-    <main className="relative flex h-screen w-screen max-w-full flex-col overflow-hidden bg-[#0B1020] p-4 font-sans selection:bg-white/20 box-border">
-      <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_16%_0%,rgba(255,255,255,0.14),transparent_24%),radial-gradient(circle_at_78%_4%,rgba(148,163,184,0.13),transparent_22%),radial-gradient(circle_at_52%_92%,rgba(255,255,255,0.085),transparent_34%)]"></div>
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-        <Header
+    <main className="relative flex h-screen w-screen max-w-full flex-col overflow-hidden bg-[#06070B] p-4 font-sans selection:bg-white/25 box-border">
+      <div className="pointer-events-none absolute inset-0 z-0 bg-[url('https://images.unsplash.com/photo-1462331940025-496dfbfc7564?auto=format&fit=crop&w=2400&q=85')] bg-cover bg-center"></div>
+      <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_18%_8%,rgba(255,244,214,0.20),transparent_24%),radial-gradient(circle_at_78%_4%,rgba(218,199,150,0.14),transparent_22%),linear-gradient(180deg,rgba(6,7,11,0.38),rgba(6,7,11,0.72))]"></div>
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-visible">
+        {headerHidden ? <HeaderMiniWidget characterName={currentCharacter.name} onShow={() => setHeaderHidden(false)} /> : <Header
           characterName={currentCharacter.name}
           deckCount={run.deck.length}
           artifactCount={run.artifacts.length}
           nodeCount={`${run.completedNodeIds.length + 1} / ${run.map.length}`}
+          onHide={() => setHeaderHidden(true)}
           onLoad={load}
           onReset={() => {
             const next = resetRunWithRoster(run);
@@ -125,11 +129,12 @@ export function App() {
           onSave={save}
           onSettings={toggleSettings}
           savedSnapshot={savedSnapshot}
-        />
+        />}
         <div className="relative z-10 grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_292px] gap-4 overflow-hidden">
           <CenterPanel
             combat={combat}
             currentCharacter={currentCharacter}
+            currentProgress={progressForCharacter(run, currentCharacter.id)}
             hand={hand}
             livingEnemyCount={livingEnemies.length}
             onOpenEnemyIntel={(enemyId) => {
@@ -152,6 +157,11 @@ export function App() {
             selectedEnemyId={selectedEnemyId}
             settingsCompact={settings.compactCards}
           />
+          {pendingUpgradeCharacter ? <LevelUpOverlay
+            character={pendingUpgradeCharacter}
+            progress={progressForCharacter(run, pendingUpgradeCharacter.id)}
+            onChoose={(stat) => setRun(applyMajorStatUpgrade(run, pendingUpgradeCharacter.id, stat))}
+          /> : null}
           <CommandDock
             combat={combat}
             phase={combat?.phase ?? run.phase}
@@ -199,21 +209,21 @@ function resetRunWithRoster(run: ReturnType<typeof createInitialRunState>) {
   };
 }
 
-function Header({ characterName, deckCount, artifactCount, nodeCount, savedSnapshot, onSave, onLoad, onSettings, onReset }: {
+function Header({ characterName, deckCount, artifactCount, nodeCount, savedSnapshot, onHide, onSave, onLoad, onSettings, onReset }: {
   characterName: string;
   deckCount: number;
   artifactCount: number;
   nodeCount: string;
   savedSnapshot: string | null;
+  onHide: () => void;
   onSave: () => void;
   onLoad: () => void;
   onSettings: () => void;
   onReset: () => void;
 }) {
   return (
-    <header className="relative z-40 flex h-[88px] w-full flex-shrink-0 items-center justify-center overflow-visible bg-transparent px-4 text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(255,255,255,0.10),transparent_24%),radial-gradient(circle_at_78%_12%,rgba(148,163,184,0.08),transparent_22%)]"></div>
-      <div className="relative grid w-full max-w-7xl grid-cols-[minmax(220px,0.85fr)_minmax(360px,1.25fr)_minmax(320px,0.95fr)] items-center gap-3">
+    <header className="relative z-40 flex h-[92px] w-full flex-shrink-0 overflow-visible text-white">
+      <div className="fixed left-0 right-0 top-0 z-40 grid grid-cols-[minmax(220px,0.85fr)_minmax(360px,1.25fr)_minmax(320px,0.95fr)] items-center gap-3 rounded-b-[22px] border-x border-b border-white/14 bg-black/52 p-3 shadow-[inset_0_1px_1px_rgba(255,244,214,0.14),0_18px_58px_rgba(0,0,0,0.38),0_0_34px_rgba(218,199,150,0.10)] backdrop-blur-xl">
         <div className="flex min-w-0 items-center gap-3 rounded-[13px] bg-black/34 px-4 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.10)]">
           <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-[11px] border border-white/12 bg-white/[0.07] shadow-[inset_0_1px_1px_rgba(255,255,255,0.16)]">
             <BookOpen className="h-5 w-5 text-white/88 stroke-[1.35]" />
@@ -241,8 +251,21 @@ function Header({ characterName, deckCount, artifactCount, nodeCount, savedSnaps
           <HeaderButton icon={<Settings className="h-3.5 w-3.5" />} label="Tune" onClick={onSettings} />
           <HeaderButton icon={<ChevronRight className="h-3.5 w-3.5" />} label="Reset" onClick={onReset} />
         </div>
+        <button className="absolute -bottom-4 left-1/2 grid h-8 w-14 -translate-x-1/2 place-items-center rounded-full border border-white/16 bg-black/62 text-white/72 shadow-[0_10px_28px_rgba(0,0,0,0.34),0_0_18px_rgba(218,199,150,0.10)] backdrop-blur-xl transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:translate-y-0.5 hover:bg-white/12 hover:text-white active:scale-[0.96]" onClick={onHide} title="Hide header" type="button"><ChevronRight className="h-4 w-4 -rotate-90" /></button>
       </div>
     </header>
+  );
+}
+
+function HeaderMiniWidget({ characterName, onShow }: { characterName: string; onShow: () => void }) {
+  return (
+    <div className="relative z-40 flex h-[48px] w-full flex-shrink-0 items-start justify-center overflow-visible px-4 text-white">
+      <button className="group grid w-[min(260px,calc(100vw-4rem))] grid-cols-[28px_1fr_24px] items-center gap-2 rounded-full border border-white/14 bg-black/50 px-3 py-2 text-left shadow-[inset_0_1px_1px_rgba(255,244,214,0.12),0_14px_44px_rgba(0,0,0,0.34),0_0_24px_rgba(218,199,150,0.10)] backdrop-blur-xl transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:bg-black/62 active:scale-[0.98]" onClick={onShow} type="button">
+        <span className="grid h-7 w-7 place-items-center rounded-full bg-white/[0.08] text-white/78"><BookOpen className="h-3.5 w-3.5" /></span>
+        <span className="min-w-0"><span className="block truncate font-serif text-sm font-black text-white">Roguepedia</span><span className="block truncate text-[10px] font-medium text-white/46">{characterName}</span></span>
+        <ChevronRight className="h-4 w-4 rotate-90 text-white/58 transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-y-0.5" />
+      </button>
+    </div>
   );
 }
 
@@ -402,10 +425,10 @@ function CommandDock({ combat, phase, primaryDisabled, run, showTutorial, onEven
   const quickEventChoice = EVENT_CHOICES[0];
 
   return (
-    <aside className="z-20 flex min-h-0 flex-col overflow-hidden rounded-[22px] border border-white/10 bg-[#11182A]/86 p-1.5 text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.10),0_22px_70px_rgba(0,0,0,0.30)]">
+    <aside className="z-20 flex min-h-0 flex-col overflow-hidden rounded-[22px] border border-white/10 bg-black/36 p-1.5 text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.10),0_22px_70px_rgba(0,0,0,0.30)]">
       <div className="rounded-[16px] bg-black/34 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.10)]">
-        <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.2em] text-white/42">{showTutorial ? 'Hint active' : 'Run phase'}</span>
-        <p className="mt-1 truncate font-serif text-lg font-black text-white">{phase}</p>
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-white/48">{showTutorial ? 'Hint active' : 'Run phase'}</span>
+        <p className="mt-1 truncate font-serif text-xl font-black text-white">{phase}</p>
       </div>
       <div className="glass-scrollbar min-h-0 flex-1 overflow-y-auto px-1.5 py-3">
         <div className="overflow-hidden rounded-[16px] border border-white/10 bg-black/24 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
@@ -417,18 +440,18 @@ function CommandDock({ combat, phase, primaryDisabled, run, showTutorial, onEven
           <DockButton icon={<Feather className="h-4 w-4" />} label="Log" meta={`${combat?.log.length ?? run.summary.length} notes`} onClick={() => onOpenWindow('log')} />
           <DockButton icon={<Settings className="h-4 w-4" />} label="Commands" meta={run.phase === 'event' ? 'event' : `${energy}/${maxEnergy} energy`} onClick={() => onOpenWindow('commands')} />
         </div>
-        {run.phase === 'event' && quickEventChoice ? <button className="mt-3 w-full border border-white/12 bg-white/[0.055] px-3 py-3 text-left text-xs font-semibold text-white/72 transition hover:bg-white/10" onClick={() => onEventChoice(quickEventChoice.id)}>{quickEventChoice.title}</button> : null}
+        {run.phase === 'event' && quickEventChoice ? <button className="mt-3 w-full border border-white/12 bg-white/[0.055] px-3 py-3.5 text-left text-sm font-semibold text-white/78 transition hover:bg-white/10" onClick={() => onEventChoice(quickEventChoice.id)}>{quickEventChoice.title}</button> : null}
       </div>
       <div className="rounded-[16px] bg-black/28 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
         <EnergyMeter energy={energy} maxEnergy={maxEnergy} />
-        <button className="mt-3 w-full bg-white px-5 py-3 font-serif text-base font-black text-black transition hover:bg-white/88 active:bg-white/75 disabled:bg-white/20 disabled:text-white/35" disabled={primaryDisabled} onClick={onPrimaryAction}>{primaryLabel}</button>
+        <button className="mt-3 w-full bg-white px-5 py-3.5 font-serif text-lg font-black text-black transition hover:bg-white/88 active:bg-white/75 disabled:bg-white/20 disabled:text-white/35" disabled={primaryDisabled} onClick={onPrimaryAction}>{primaryLabel}</button>
       </div>
     </aside>
   );
 }
 
 function DockButton({ icon, label, meta, onClick }: { icon: ReactNode; label: string; meta: string; onClick: () => void }) {
-  return <button className="group grid w-full grid-cols-[28px_1fr] items-center gap-2 rounded-[10px] px-3 py-2.5 text-left transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:bg-white/[0.09] active:scale-[0.98] active:bg-white/[0.13]" onClick={onClick}><span className="grid h-7 w-7 place-items-center rounded-[8px] bg-white/[0.07] text-white/70 transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-0.5 group-hover:-translate-y-0.5">{icon}</span><span className="min-w-0"><span className="block text-xs font-semibold text-white">{label}</span><span className="block truncate font-mono text-[8px] uppercase tracking-[0.14em] text-white/42">{meta}</span></span></button>;
+  return <button className="group grid w-full grid-cols-[34px_1fr] items-center gap-3 rounded-[10px] px-3 py-3 text-left transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-0.5 hover:bg-white/[0.09] active:scale-[0.98] active:bg-white/[0.13]" onClick={onClick}><span className="grid h-8 w-8 place-items-center rounded-[8px] bg-white/[0.07] text-white/76 transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-0.5 group-hover:-translate-y-0.5">{icon}</span><span className="min-w-0"><span className="block text-sm font-semibold leading-tight text-white">{label}</span><span className="mt-0.5 block truncate font-mono text-[9px] uppercase tracking-[0.13em] text-white/48">{meta}</span></span></button>;
 }
 
 function EnergyMeter({ energy, maxEnergy }: { energy: number; maxEnergy: number }) {
@@ -458,10 +481,11 @@ function GameWindowOverlay({ activeWindow, character, combat, intelEnemy, roster
   }
 
   const title = windowTitle(activeWindow);
+  const compactWindow = activeWindow === 'player' || activeWindow === 'lore';
 
   return (
-    <div className="absolute inset-0 z-50 grid place-items-center bg-black/70 p-6 backdrop-blur-md">
-      <div className="flex max-h-[90vh] w-full max-w-7xl flex-col overflow-hidden rounded-[22px] border border-white/16 bg-[#070A0F]/96 text-white shadow-[0_28px_90px_rgba(0,0,0,0.46)]">
+    <div className="absolute inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-md">
+      <div className={`flex max-h-[calc(100%-1rem)] w-full flex-col overflow-hidden rounded-[22px] border border-white/16 bg-black/58 text-white shadow-[0_28px_90px_rgba(0,0,0,0.46)] ${compactWindow ? 'max-w-4xl' : 'max-w-7xl'}`}>
         <div className="grid grid-cols-[1fr_auto] items-center border-b border-white/10 bg-white/[0.035] px-4 py-3">
           <div className="min-w-0">
             <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.22em] text-white/42">Workspace</span>
@@ -473,11 +497,11 @@ function GameWindowOverlay({ activeWindow, character, combat, intelEnemy, roster
           {activeWindow === 'map' ? <MapWindow run={run} onChooseNode={onChooseNode} /> : null}
           {activeWindow === 'commands' ? <CommandsWindow combat={combat} phase={combat?.phase ?? run.phase} run={run} onEventChoice={onEventChoice} onPrimaryAction={onPrimaryAction} /> : null}
           {activeWindow === 'log' ? <LogWindow combat={combat} run={run} /> : null}
-          {activeWindow === 'player' ? <PlayerIntelWindow character={character} player={combat?.player} /> : null}
+          {activeWindow === 'player' ? <PlayerIntelWindow character={character} player={combat?.player} progress={progressForCharacter(run, character.id)} /> : null}
           {activeWindow === 'enemy' && intelEnemy ? <EnemyIntelWindow enemy={intelEnemy} intent={combat?.enemyIntent[intelEnemy.id] ?? 7} /> : null}
           {activeWindow === 'inventory' ? <InventoryWindow run={run} onArtifact={onArtifact} /> : null}
           {activeWindow === 'synergies' ? <SynergyWindow run={run} onScan={onScan} /> : null}
-          {activeWindow === 'lore' ? <CharacterSheet character={character} /> : null}
+          {activeWindow === 'lore' ? <div className="mx-auto w-full max-w-3xl"><CharacterSheet character={character} compact progress={progressForCharacter(run, character.id)} /></div> : null}
           {activeWindow === 'gallery' ? <GalleryPanel roster={roster} run={run} /> : null}
         </div>
       </div>
@@ -556,8 +580,8 @@ function LogWindow({ combat, run }: { combat: ReturnType<typeof createInitialRun
   return <Panel title="Recent Run Notes"><div className="border border-white/10">{(logs.length ? logs : ['Choose a glowing map node to begin.']).map((entry, index) => <div className="grid grid-cols-[36px_1fr] gap-3 border-b border-white/10 bg-white/[0.04] p-3 text-sm text-white/68 last:border-b-0" key={`${entry}-${index}`}><span className="font-mono text-[10px] text-white/38 tabular-nums">{String(index + 1).padStart(2, '0')}</span><span>{entry}</span></div>)}</div></Panel>;
 }
 
-function PlayerIntelWindow({ character, player }: { character: typeof runtimeRoster[number]; player: NonNullable<ReturnType<typeof createInitialRunState>['combat']>['player'] | undefined }) {
-  return <div className="grid grid-cols-[0.9fr_1.1fr] gap-4"><PlayerIntelCard character={character} player={player} /><CharacterSheet character={character} /></div>;
+function PlayerIntelWindow({ character, player, progress }: { character: typeof runtimeRoster[number]; player: NonNullable<ReturnType<typeof createInitialRunState>['combat']>['player'] | undefined; progress: CharacterProgress }) {
+  return <div className="grid min-h-0 grid-cols-[minmax(240px,0.75fr)_minmax(0,1fr)] gap-3"><PlayerIntelCard character={character} player={player} progress={progress} /><CharacterSheet character={character} compact progress={progress} /></div>;
 }
 
 function EnemyIntelWindow({ enemy, intent }: { enemy: NonNullable<ReturnType<typeof createInitialRunState>['combat']>['enemies'][number]; intent: number }) {
@@ -644,36 +668,93 @@ function GalleryPanel({ roster, run }: { roster: typeof runtimeRoster; run: Retu
               <button className={`grid w-full grid-cols-[56px_1fr_104px] items-center border-b border-white/10 px-3 py-2 text-left transition hover:bg-white/[0.08] ${selected?.id === character.id ? 'bg-white/[0.12] text-white' : 'text-white/80'}`} key={character.id} onClick={() => setSelectedId(character.id)}>
                 {character.source.image_url ? <img className="h-9 w-9 border border-white/15 object-cover object-top" src={character.source.image_url} alt={character.name} referrerPolicy="no-referrer" /> : <BookMarked className="h-8 w-8 text-white" />}
                 <strong className="truncate font-serif text-sm text-white">{character.name}</strong>
-                <span className="font-mono text-[8px] font-black uppercase tracking-widest text-white/45">{status}</span>
+                <span className="flex items-center justify-between gap-2"><span className="font-mono text-[8px] font-black uppercase tracking-widest text-white/45">{status}</span><RarityBadge rarity={character.rarity} /></span>
               </button>
             );
           })}
         </div>
       </Panel>
-      {selected ? <CharacterSheet character={selected} /> : null}
+      {selected ? <CharacterSheet character={selected} progress={run.characterProgress[selected.id]} /> : null}
     </div>
   );
 }
 
-function CharacterSheet({ character }: { character: typeof runtimeRoster[number] }) {
+function CharacterSheet({ character, compact = false, progress }: { character: typeof runtimeRoster[number]; compact?: boolean; progress?: CharacterProgress }) {
+  const stats = progress ? effectiveStats(character, progress) : character.stats;
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className={`flex min-h-0 flex-col gap-3 ${compact ? 'text-[0.95em]' : 'gap-4'}`}>
       <Panel title={`${character.name} Sheet`}>
-        <div className="flex items-start gap-3 mb-3">
-          {character.source.image_url ? <img className="h-16 w-16 border border-white/15 object-cover object-top" src={character.source.image_url} alt={character.name} referrerPolicy="no-referrer" /> : <BookMarked className="w-8 h-8 text-white flex-shrink-0" />}
-          <div>
-            <p className="text-xs text-white/60 leading-relaxed">{character.short_lore || character.lore}</p>
-            <div className="mt-2 flex flex-wrap gap-1">{character.tags.slice(0, 4).map((tag) => <span className="border border-white/10 bg-white/[0.07] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white/60" key={tag}>{tag}</span>)}</div>
+        <CharacterCardFrame compact={compact} rarity={character.rarity}>
+          <div className="p-3">
+            <div className="mb-3 flex items-start gap-3">
+              {character.source.image_url ? <img className={`${compact ? 'h-12 w-12' : 'h-16 w-16'} rounded-[10px] border border-white/15 object-cover object-top`} src={character.source.image_url} alt={character.name} referrerPolicy="no-referrer" /> : <BookMarked className="w-8 h-8 text-white flex-shrink-0" />}
+              <div className="min-w-0 flex-1">
+                <div className="mb-2 flex items-center justify-between gap-2"><RarityBadge rarity={character.rarity} />{progress ? <span className="font-mono text-[10px] font-black uppercase tracking-[0.14em] text-white/48">Lv. {progress.level}</span> : null}</div>
+                {progress ? <ProgressRail progress={progress} /> : null}
+                <p className="mt-2 text-xs text-white/60 leading-relaxed">{character.short_lore || character.lore}</p>
+                <div className="mt-2 flex flex-wrap gap-1">{character.tags.slice(0, 4).map((tag) => <span className="border border-white/10 bg-white/[0.07] px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white/60" key={tag}>{tag}</span>)}</div>
+              </div>
+            </div>
+            <a className="text-xs font-semibold text-white/75 hover:text-white hover:underline" href={character.source.wikidata_url} rel="noreferrer" target="_blank">Read source</a>
           </div>
-        </div>
-        <a className="text-xs font-semibold text-white/75 hover:text-white hover:underline" href={character.source.wikidata_url} rel="noreferrer" target="_blank">Read source</a>
+        </CharacterCardFrame>
       </Panel>
       <Panel title="Stats">
-        <div className="grid grid-cols-3 gap-2">{Object.entries(character.stats).map(([stat, value], index) => <StatRune key={stat} label={stat} value={String(value)} tone={statTone(index)} />)}</div>
+        <div className="space-y-1.5">{Object.entries(stats).map(([stat, value], index) => <StatRune key={stat} label={stat} value={String(value)} tone={statTone(index)} />)}</div>
       </Panel>
       <Panel title={`Cards (${character.cards.length})`}>
-        <div className="border border-white/10">{character.cards.map((card) => <CardSummary card={card} key={card.id} />)}</div>
+        <div className={`glass-scrollbar border border-white/10 ${compact ? 'max-h-[28vh] overflow-y-auto' : ''}`}>{character.cards.map((card) => <CardSummary card={card} key={card.id} />)}</div>
       </Panel>
+    </div>
+  );
+}
+
+function ProgressRail({ progress }: { progress: CharacterProgress }) {
+  const nextLevelXp = xpForNextLevel(progress.level);
+  const pct = Math.max(0, Math.min(100, (progress.xp / nextLevelXp) * 100));
+
+  return (
+    <div className="rounded-[12px] border border-white/10 bg-black/22 p-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)]">
+      <div className="flex items-center justify-between gap-2 font-mono text-[9px] font-black uppercase tracking-[0.16em] text-white/58"><span>Lv. {progress.level}</span><span>{progress.xp}/{nextLevelXp} XP</span></div>
+      <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/[0.08]"><div className="h-full rounded-full bg-gradient-to-r from-[#F2D27E]/90 via-white/70 to-transparent shadow-[0_0_16px_rgba(242,210,126,0.34)]" style={{ width: `${pct}%` }}></div></div>
+    </div>
+  );
+}
+
+type RarityTheme = {
+  label: string;
+  text: string;
+  ring: string;
+  glow: string;
+  wash: string;
+  badge: string;
+};
+
+const rarityThemes: Record<CharacterRarity, RarityTheme> = {
+  D: { label: 'D', text: 'text-stone-100', ring: 'border-stone-400/65', glow: 'shadow-[0_0_26px_rgba(168,162,158,0.30)]', wash: 'from-stone-400/34', badge: 'bg-stone-500/42' },
+  C: { label: 'C', text: 'text-emerald-100', ring: 'border-emerald-300/70', glow: 'shadow-[0_0_30px_rgba(52,211,153,0.34)]', wash: 'from-emerald-300/34', badge: 'bg-emerald-500/42' },
+  B: { label: 'B', text: 'text-sky-100', ring: 'border-sky-300/75', glow: 'shadow-[0_0_34px_rgba(56,189,248,0.40)]', wash: 'from-sky-300/38', badge: 'bg-sky-500/42' },
+  A: { label: 'A', text: 'text-violet-100', ring: 'border-violet-300/78', glow: 'shadow-[0_0_38px_rgba(167,139,250,0.44)]', wash: 'from-violet-300/40', badge: 'bg-violet-500/44' },
+  S: { label: 'S', text: 'text-[#FFF5C7]', ring: 'border-[#F2D27E]/85', glow: 'shadow-[0_0_46px_rgba(242,210,126,0.52),0_0_86px_rgba(255,255,255,0.14)]', wash: 'from-[#F2D27E]/46', badge: 'bg-[#B68A2D]/52' },
+};
+
+function rarityTheme(rarity: CharacterRarity): RarityTheme {
+  return rarityThemes[rarity];
+}
+
+function RarityBadge({ rarity }: { rarity: CharacterRarity }) {
+  const theme = rarityTheme(rarity);
+  return <span className={`inline-flex h-7 min-w-7 items-center justify-center rounded-[8px] border ${theme.ring} ${theme.badge} px-2 font-mono text-sm font-black uppercase tracking-[0.06em] ${theme.text} ${theme.glow}`}>{theme.label}</span>;
+}
+
+function CharacterCardFrame({ children, compact = false, rarity }: { children: ReactNode; compact?: boolean; rarity: CharacterRarity }) {
+  const theme = rarityTheme(rarity);
+
+  return (
+    <div className={`relative overflow-hidden rounded-[16px] border-2 ${theme.ring} bg-black/22 ${theme.glow} ${compact ? 'p-px' : 'p-0.5'}`}>
+      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${theme.wash} via-transparent to-black/10 opacity-95`}></div>
+      <div className="relative z-10 overflow-hidden rounded-[14px] border border-white/[0.045]">{children}</div>
     </div>
   );
 }
@@ -698,11 +779,18 @@ function statLabel(label: string): string {
 }
 
 function StatRune({ label, value, tone }: { label: string; value: string; tone: 'red' | 'blue' | 'gold' | 'green' }) {
-  const glow = tone === 'red' ? 'shadow-white/10' : tone === 'blue' ? 'shadow-slate-200/10' : tone === 'green' ? 'shadow-emerald-100/10' : 'shadow-white/10';
+  const toneClass = tone === 'red'
+    ? 'from-rose-300/80 via-rose-100/55 to-transparent shadow-[0_0_14px_rgba(253,164,175,0.34)]'
+    : tone === 'blue'
+      ? 'from-sky-200/76 via-slate-100/48 to-transparent shadow-[0_0_14px_rgba(186,230,253,0.28)]'
+      : tone === 'green'
+        ? 'from-emerald-300/78 via-emerald-100/48 to-transparent shadow-[0_0_14px_rgba(110,231,183,0.30)]'
+        : 'from-[#F2D27E]/84 via-[#FFE9A8]/52 to-transparent shadow-[0_0_14px_rgba(242,210,126,0.34)]';
   return (
-    <div className={`grid min-h-10 grid-cols-[1fr_auto] items-center gap-2 border border-white/15 bg-white/[0.08] px-2 py-1 text-left shadow-lg ${glow} backdrop-blur-md`} title={label}>
-      <span className="truncate font-mono text-[8px] font-black uppercase tracking-widest text-white/60">{statLabel(label)}</span>
-      <span className="font-mono text-sm font-black text-white">{value}</span>
+    <div className="group grid min-h-9 grid-cols-[46px_1fr_auto] items-center gap-2 rounded-full border border-white/12 bg-black/20 px-2 py-1 text-left shadow-[inset_0_1px_1px_rgba(255,255,255,0.08)] backdrop-blur-md" title={label}>
+      <span className="rounded-full bg-white/[0.07] px-2 py-1 text-center font-mono text-[8px] font-black uppercase tracking-[0.14em] text-white/58">{statLabel(label)}</span>
+      <span className={`h-2 overflow-hidden rounded-full bg-white/[0.08] shadow-[inset_0_1px_1px_rgba(0,0,0,0.38)]`}><span className={`block h-full w-3/4 rounded-full bg-gradient-to-r ${toneClass}`}></span></span>
+      <span className="min-w-8 text-right font-mono text-sm font-black text-white tabular-nums">{value}</span>
     </div>
   );
 }
@@ -711,24 +799,30 @@ function CardSummary({ card }: { card: RuntimeCard }) {
   return <div className="border-b border-white/10 bg-white/[0.04] p-2 last:border-b-0"><div className="grid grid-cols-[1fr_28px] items-center gap-2"><strong className="truncate font-serif text-sm text-white">{card.name}</strong><span className="border border-white/15 bg-black/35 px-2 py-0.5 text-center text-[10px] font-bold text-white">{card.energy_cost}</span></div><p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-white/45">{card.card_type} · {card.card_rarity}</p><p className="mt-1 text-xs leading-relaxed text-white/60">{card.mechanics_text}</p></div>;
 }
 
-function PlayerIntelCard({ character, player }: { character: typeof runtimeRoster[number]; player: NonNullable<ReturnType<typeof createInitialRunState>['combat']>['player'] | undefined }) {
-  const stats = Object.entries(character.stats).filter(([stat]) => stat !== 'hp');
-  const hp = player ? `${player.hp}/${player.maxHp}` : 'Ready';
+function PlayerIntelCard({ character, player, progress }: { character: typeof runtimeRoster[number]; player: NonNullable<ReturnType<typeof createInitialRunState>['combat']>['player'] | undefined; progress: CharacterProgress }) {
+  const effective = effectiveStats(character, progress);
+  const stats = Object.entries(effective).filter(([stat]) => stat !== 'hp');
+  const hp = player ? `${player.hp}/${player.maxHp}` : String(effective.hp);
   const block = player?.block ?? 0;
 
   return (
-    <div className="glass-panel w-full p-5 text-white">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-black uppercase tracking-[0.22em] text-white/45">Hero Sheet</span>
-        <span className="border border-white/15 bg-white/[0.07] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/65">{character.tags[0] ?? 'Hero'}</span>
-      </div>
-      <h3 className="mt-2 font-serif text-2xl font-black leading-tight text-white">{character.name}</h3>
-      <p className="mt-1 line-clamp-2 text-xs italic leading-relaxed text-white/60">{character.short_lore || character.lore}</p>
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <StatRune label="HP" value={hp} tone="red" />
-        <StatRune label="BLK" value={String(block)} tone="blue" />
-        {stats.map(([stat, value], index) => <StatRune key={stat} label={stat} value={String(value)} tone={statTone(index)} />)}
-      </div>
+    <div className="glass-panel w-full p-3 text-white">
+      <CharacterCardFrame rarity={character.rarity}>
+        <div className="p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] font-black uppercase tracking-[0.22em] text-white/45">Hero Sheet</span>
+            <div className="flex items-center gap-2"><RarityBadge rarity={character.rarity} /><span className="border border-white/15 bg-white/[0.07] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white/65">Lv. {progress.level}</span></div>
+          </div>
+          <h3 className="mt-2 font-serif text-2xl font-black leading-tight text-white">{character.name}</h3>
+          <p className="mt-1 line-clamp-2 text-xs italic leading-relaxed text-white/60">{character.short_lore || character.lore}</p>
+          <div className="mt-4"><ProgressRail progress={progress} /></div>
+          <div className="mt-4 space-y-1.5">
+            <StatRune label="HP" value={hp} tone="red" />
+            <StatRune label="BLK" value={String(block)} tone="blue" />
+            {stats.map(([stat, value], index) => <StatRune key={stat} label={stat} value={String(value)} tone={statTone(index)} />)}
+          </div>
+        </div>
+      </CharacterCardFrame>
     </div>
   );
 }
@@ -743,7 +837,7 @@ function EnemyIntelCard({ enemy, intent }: { enemy: NonNullable<ReturnType<typeo
         <div className="flex items-center gap-1 text-white/80"><Sword className="w-4 h-4" /><span className="font-mono text-sm font-black">{intent}</span></div>
       </div>
       <h3 className="mt-2 font-serif text-xl font-black leading-tight text-white">{enemy.name}</h3>
-      <div className="mt-4 grid grid-cols-3 gap-2">
+      <div className="mt-4 space-y-1.5">
         <EnemyRune label="HP" value={`${enemy.hp}/${enemy.maxHp}`} tone="red" />
         <EnemyRune label="BLK" value={String(enemy.block)} tone="blue" />
         <EnemyRune label="ATK" value={String(intent)} tone="gold" />
@@ -816,9 +910,10 @@ function SynergyItem({ title, body }: { title: string; body: string }) {
   return <div className="grid grid-cols-[32px_1fr] items-start gap-3 border-b border-white/10 bg-white/[0.04] p-3 last:border-b-0"><div className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center border border-white/15 bg-white/[0.08]"><BookOpen className="w-4 h-4 text-white/70" /></div><div className="flex flex-col"><span className="text-sm font-bold text-white">{title}</span><span className="text-xs text-white/55 mt-0.5">{body}</span></div></div>;
 }
 
-function CenterPanel({ combat, currentCharacter, hand, livingEnemyCount, recruitChoices, selectedEnemy, selectedEnemyId, settingsCompact, phase, primaryDisabled, onOpenEnemyIntel, onOpenPlayerIntel, onPrimaryAction, onRecruit, onSelectEnemy, onPlayCard }: {
+function CenterPanel({ combat, currentCharacter, currentProgress, hand, livingEnemyCount, recruitChoices, selectedEnemy, selectedEnemyId, settingsCompact, phase, primaryDisabled, onOpenEnemyIntel, onOpenPlayerIntel, onPrimaryAction, onRecruit, onSelectEnemy, onPlayCard }: {
   combat: ReturnType<typeof createInitialRunState>['combat'];
   currentCharacter: typeof runtimeRoster[number];
+  currentProgress: CharacterProgress;
   hand: RuntimeCard[];
   livingEnemyCount: number;
   recruitChoices: typeof runtimeRoster;
@@ -841,11 +936,10 @@ function CenterPanel({ combat, currentCharacter, hand, livingEnemyCount, recruit
   const slideHand = (direction: -1 | 1) => handScrollerRef.current?.scrollBy({ left: direction * 360, behavior: 'smooth' });
 
   return (
-    <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-[22px] border border-white/10 bg-[#11182A]/86 p-1.5 font-sans shadow-[inset_0_1px_1px_rgba(255,255,255,0.10),0_24px_80px_rgba(0,0,0,0.34)]">
-      <div className="absolute inset-x-0 top-0 z-20 grid h-8 grid-cols-[1fr_auto_1fr] items-center border-b border-white/10 bg-black/32 px-4 backdrop-blur-xl"><div className="h-px bg-white/10"></div><div className="flex items-center gap-2 px-4"><Sparkles className="h-3 w-3 text-white/55" /><span className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-white/75">{phase}</span><Sparkles className="h-3 w-3 text-white/55" /></div><div className="h-px bg-white/10"></div></div>
+    <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-[22px] bg-black/36 p-1.5 font-sans shadow-[inset_0_1px_1px_rgba(255,244,214,0.14),0_24px_80px_rgba(0,0,0,0.42),0_0_46px_rgba(218,199,150,0.12)]">
+      <div className="absolute inset-x-6 top-4 z-20 flex justify-center"><div className="rounded-full bg-black/20 px-4 py-1.5 shadow-[inset_0_1px_0_rgba(255,244,214,0.14)]"><div className="flex items-center gap-2"><Sparkles className="h-3 w-3 text-[#DAC796]/75" /><span className="font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-white/78">{phase}</span><Sparkles className="h-3 w-3 text-[#DAC796]/75" /></div></div></div>
       <GameplayBackdrop />
-      <div className="absolute inset-1.5 rounded-[18px] border border-white/[0.055] pointer-events-none z-10"></div>
-      <div className="absolute bottom-1.5 left-1.5 right-1.5 h-[318px] rounded-b-[18px] border-t border-white/10 bg-gradient-to-t from-[rgba(5,7,13,0.98)] via-[rgba(5,7,13,0.90)] to-transparent z-10 pointer-events-none"></div>
+      <div className="absolute bottom-1.5 left-1.5 right-1.5 h-[318px] rounded-b-[18px] bg-gradient-to-t from-[rgba(32,35,39,0.97)] via-[rgba(32,35,39,0.82)] to-transparent z-10 pointer-events-none"></div>
       <div className="relative z-20 grid h-full min-h-0 grid-rows-[minmax(260px,1fr)_290px] gap-4 px-8 pb-4 pt-10 overflow-hidden">
         <div className="min-h-0 flex items-start justify-center gap-72 px-8 pt-10 overflow-visible">
           <div className="relative flex">
@@ -857,6 +951,7 @@ function CenterPanel({ combat, currentCharacter, hand, livingEnemyCount, recruit
               imageUrl={currentCharacter.source.image_url}
               inspectable
               maxHp={player?.maxHp ?? 1}
+              level={currentProgress.level}
               name={currentCharacter.name}
               onInspect={onOpenPlayerIntel}
             />
@@ -890,6 +985,44 @@ function CenterPanel({ combat, currentCharacter, hand, livingEnemyCount, recruit
   );
 }
 
+function LevelUpOverlay({ character, progress, onChoose }: { character: typeof runtimeRoster[number]; progress: CharacterProgress; onChoose: (stat: CharacterStatKey) => void }) {
+  const options = majorUpgradeOptions(character);
+
+  return (
+    <div className="absolute inset-0 z-[60] grid place-items-center bg-black/66 px-8 backdrop-blur-sm">
+      <div className="glass-panel max-w-3xl p-5 text-white">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <span className="font-mono text-[10px] font-black uppercase tracking-[0.22em] text-white/45">Level up</span>
+            <h3 className="font-serif text-3xl font-black">{character.name} reached Lv. {progress.level}</h3>
+            <p className="mt-1 text-sm text-white/58">Choose one major stat boost before continuing the run.</p>
+          </div>
+          <span className="rounded-full border border-white/14 bg-white/[0.07] px-3 py-1 font-mono text-xs font-black text-white/70">{progress.xp}/{xpForNextLevel(progress.level)} XP</span>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {options.map((option) => <button className="group border border-white/14 bg-white/[0.065] p-4 text-left shadow-[0_18px_50px_rgba(0,0,0,0.26)] backdrop-blur-xl transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-1 hover:bg-white/12 active:scale-[0.98]" key={option.stat} onClick={() => onChoose(option.stat)}>
+            <span className="font-mono text-[9px] font-black uppercase tracking-[0.18em] text-white/45">Major upgrade</span>
+            <strong className="mt-2 block font-serif text-2xl text-white">+{option.amount} {statLabel(option.stat)}</strong>
+            <span className="mt-2 block text-xs font-semibold leading-relaxed text-white/58">Improve {character.name}'s run-local growth for this attempt.</span>
+          </button>)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function majorUpgradeOptions(character: typeof runtimeRoster[number]): { stat: CharacterStatKey; amount: number }[] {
+  const sortedStats = (Object.keys(character.stats) as CharacterStatKey[])
+    .filter((stat) => stat !== 'hp')
+    .sort((first, second) => character.stats[second] - character.stats[first]);
+
+  return [
+    { stat: 'hp', amount: 6 },
+    { stat: sortedStats[0] ?? 'attack', amount: 2 },
+    { stat: sortedStats.find((stat) => stat === 'defense' || stat === 'survival') ?? sortedStats[1] ?? 'defense', amount: 2 },
+  ];
+}
+
 function RewardOverlay({ recruits, onRecruit, onSkip }: { recruits: typeof runtimeRoster; onRecruit: (characterId: string) => void; onSkip: () => void }) {
   return (
     <div className="absolute inset-0 z-50 grid place-items-center bg-black/58 px-8 backdrop-blur-sm">
@@ -911,38 +1044,38 @@ function RewardOverlay({ recruits, onRecruit, onSkip }: { recruits: typeof runti
 
 function RecruitCard({ character, onRecruit }: { character: typeof runtimeRoster[number]; onRecruit: () => void }) {
   return (
-    <button className="border border-white/15 bg-white/[0.07] p-3 text-left shadow-[0_18px_50px_rgba(0,0,0,0.26)] backdrop-blur-xl transition hover:-translate-y-1 hover:bg-white/12" onClick={onRecruit}>
-      <div className="mb-2 flex items-center gap-3">
-        {character.source.image_url ? <img className="h-16 w-16 border border-white/15 object-cover object-top" src={character.source.image_url} alt={character.name} referrerPolicy="no-referrer" /> : <BookMarked className="h-10 w-10 text-white" />}
-        <div className="min-w-0">
-          <h4 className="truncate font-serif text-lg font-black text-white">{character.name}</h4>
-          <p className="font-mono text-[9px] font-black uppercase tracking-widest text-white/45">+{character.cards.length} cards</p>
+    <button className="text-left transition-all duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-1 active:scale-[0.98]" onClick={onRecruit}>
+      <CharacterCardFrame rarity={character.rarity}>
+        <div className="bg-white/[0.045] p-3 backdrop-blur-xl">
+          <div className="mb-2 flex items-center gap-3">
+            {character.source.image_url ? <img className="h-16 w-16 rounded-[10px] border border-white/15 object-cover object-top" src={character.source.image_url} alt={character.name} referrerPolicy="no-referrer" /> : <BookMarked className="h-10 w-10 text-white" />}
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex items-center justify-between gap-2"><RarityBadge rarity={character.rarity} /><span className="font-mono text-[9px] font-black uppercase tracking-widest text-white/45">+{character.cards.length} cards</span></div>
+              <h4 className="truncate font-serif text-lg font-black text-white">{character.name}</h4>
+            </div>
+          </div>
+          <p className="line-clamp-3 text-xs font-semibold leading-relaxed text-white/60">{character.short_lore || character.lore}</p>
+          <div className="mt-3 grid grid-cols-3 gap-1">
+            <StatRune label="HP" value={String(character.stats.hp)} tone="red" />
+            <StatRune label="ATK" value={String(character.stats.attack)} tone="gold" />
+            <StatRune label="DEF" value={String(character.stats.defense)} tone="blue" />
+          </div>
         </div>
-      </div>
-      <p className="line-clamp-3 text-xs font-semibold leading-relaxed text-white/60">{character.short_lore || character.lore}</p>
-      <div className="mt-3 grid grid-cols-3 gap-1">
-        <StatRune label="HP" value={String(character.stats.hp)} tone="red" />
-        <StatRune label="ATK" value={String(character.stats.attack)} tone="gold" />
-        <StatRune label="DEF" value={String(character.stats.defense)} tone="blue" />
-      </div>
+      </CharacterCardFrame>
     </button>
   );
 }
 
 function GameplayBackdrop() {
   return (
-    <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden bg-[#0E1528]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(255,255,255,0.13),transparent_22%),radial-gradient(circle_at_78%_16%,rgba(148,163,184,0.10),transparent_25%),radial-gradient(circle_at_50%_82%,rgba(255,255,255,0.06),transparent_32%)]"></div>
-      <div className="absolute inset-8 rounded-[22px] border border-white/[0.055]"></div>
-      <div className="absolute inset-x-10 top-12 h-px bg-gradient-to-r from-transparent via-white/12 to-transparent"></div>
-      <div className="absolute inset-0 bg-[radial-gradient(circle,rgba(255,255,255,0.14)_1px,transparent_1px)] bg-[size:54px_54px] opacity-18"></div>
-      <div className="absolute inset-x-12 bottom-8 h-40 rounded-[999px] bg-white/[0.035] blur-3xl"></div>
-      <div className="absolute inset-0 bg-black/30"></div>
+    <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-[18px] bg-black/18">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_22%_18%,rgba(255,244,214,0.13),transparent_24%),radial-gradient(circle_at_78%_16%,rgba(218,199,150,0.10),transparent_28%),linear-gradient(180deg,rgba(0,0,0,0.10),rgba(0,0,0,0.28))]"></div>
+      <div className="absolute inset-x-14 bottom-8 h-40 rounded-[999px] bg-[#DAC796]/[0.05] blur-3xl"></div>
     </div>
   );
 }
 
-function CombatantPanel({ align, block, currentHp, hpLabel, imageUrl, inspectable, intent, maxHp, name, onInspect }: {
+function CombatantPanel({ align, block, currentHp, hpLabel, imageUrl, inspectable, intent, level, maxHp, name, onInspect }: {
   align: 'left' | 'right';
   block: number;
   currentHp: number;
@@ -950,6 +1083,7 @@ function CombatantPanel({ align, block, currentHp, hpLabel, imageUrl, inspectabl
   imageUrl?: string | null;
   inspectable?: boolean;
   intent?: number;
+  level?: number;
   maxHp: number;
   name: string;
   onInspect?: () => void;
@@ -973,7 +1107,7 @@ function CombatantPanel({ align, block, currentHp, hpLabel, imageUrl, inspectabl
         )}
       </div>
       <div className="w-full text-center relative">
-        <h2 className={`font-serif font-bold text-lg text-[#FDFBF8] drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] mb-2 truncate ${right ? 'text-right pr-2' : 'text-left pl-2'}`}>{name}</h2>
+        <h2 className={`font-serif font-bold text-lg text-[#FDFBF8] drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] mb-2 truncate ${right ? 'text-right pr-2' : 'text-left pl-2'}`}>{name}{level ? <span className="ml-2 font-mono text-[10px] font-black uppercase tracking-[0.12em] text-white/58">Lv. {level}</span> : null}</h2>
         <HealthBar current={currentHp} max={maxHp} label={hpLabel} />
         <BlockBadge value={block} align={align} />
       </div>

@@ -13,7 +13,7 @@
 
 body {
   font-family: var(--font-sans);
-  background: #0B1020;
+  background: #06070B;
   margin: 0;
   overflow: hidden;
 }
@@ -34,19 +34,19 @@ a:focus-visible {
 
 .glass-panel,
 .glass-dark-panel {
-  border: 1px solid rgba(255, 255, 255, 0.26);
+  border: 1px solid rgba(255, 244, 214, 0.24);
   border-radius: 14px;
-  background: rgba(22, 29, 48, 0.74);
-  backdrop-filter: blur(14px);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.16), 0 18px 54px rgba(3, 8, 23, 0.42), 0 0 32px rgba(148, 163, 184, 0.10);
+  background: rgba(12, 14, 20, 0.48);
+  backdrop-filter: blur(16px);
+  box-shadow: inset 0 1px 1px rgba(255, 244, 214, 0.14), 0 18px 54px rgba(0, 0, 0, 0.42), 0 0 34px rgba(218, 199, 150, 0.12);
 }
 
 .glass-button {
-  border: 1px solid rgba(255, 255, 255, 0.30);
+  border: 1px solid rgba(255, 244, 214, 0.30);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.13);
-  backdrop-filter: blur(14px);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.14), 0 10px 30px rgba(3, 8, 23, 0.34), 0 0 24px rgba(148, 163, 184, 0.10);
+  background: rgba(255, 244, 214, 0.10);
+  backdrop-filter: blur(16px);
+  box-shadow: inset 0 1px 1px rgba(255, 244, 214, 0.14), 0 10px 30px rgba(0, 0, 0, 0.34), 0 0 24px rgba(218, 199, 150, 0.12);
 }
 
 .glass-button:hover {
