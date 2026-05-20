@@ -2,7 +2,7 @@
 
 @theme {
   --font-serif: "Playfair Display", ui-serif, Georgia, serif;
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Geist", "Outfit", ui-sans-serif, system-ui, sans-serif;
 
   --color-rp-beige-bg: #F4F1EA;
   --color-rp-dark: #1E293B;
@@ -13,7 +13,7 @@
 
 body {
   font-family: var(--font-sans);
-  background-color: var(--color-rp-dark);
+  background: #0B1020;
   margin: 0;
   overflow: hidden;
 }
@@ -26,61 +26,61 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.pixel-art {
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.72);
+  outline-offset: 2px;
 }
 
-.pixel-panel {
-  border: 16px solid transparent;
-  border-image: url('/assets/ui/pixel-panel.svg') 16 fill stretch;
-  image-rendering: pixelated;
+.glass-panel,
+.glass-dark-panel {
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  border-radius: 14px;
+  background: rgba(22, 29, 48, 0.74);
+  backdrop-filter: blur(14px);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.16), 0 18px 54px rgba(3, 8, 23, 0.42), 0 0 32px rgba(148, 163, 184, 0.10);
 }
 
-.pixel-dark-panel {
-  border: 16px solid transparent;
-  border-image: url('/assets/ui/pixel-dark-panel.svg') 16 fill stretch;
-  image-rendering: pixelated;
+.glass-button {
+  border: 1px solid rgba(255, 255, 255, 0.30);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.13);
+  backdrop-filter: blur(14px);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.14), 0 10px 30px rgba(3, 8, 23, 0.34), 0 0 24px rgba(148, 163, 184, 0.10);
 }
 
-.pixel-button {
-  border: 12px solid transparent;
-  border-image: url('/assets/ui/pixel-button.svg') 12 fill stretch;
-  image-rendering: pixelated;
+.glass-button:hover {
+  background: rgba(255, 255, 255, 0.16);
 }
 
-.pixel-card-attack {
-  border: 18px solid transparent;
-  border-image: url('/assets/ui/pixel-card-attack.svg') 18 fill stretch;
-  image-rendering: pixelated;
+button,
+section,
+img,
+[role="button"] {
+  border-radius: 8px;
 }
 
-.pixel-card-skill {
-  border: 18px solid transparent;
-  border-image: url('/assets/ui/pixel-card-skill.svg') 18 fill stretch;
-  image-rendering: pixelated;
-}
-
-.pixel-scrollbar {
-  scrollbar-color: #D4AF37 #0B1120;
+.glass-scrollbar {
+  scrollbar-color: rgba(255, 255, 255, 0.65) rgba(255, 255, 255, 0.08);
   scrollbar-width: thin;
 }
 
-.pixel-scrollbar::-webkit-scrollbar {
-  height: 14px;
+.glass-scrollbar::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
 }
 
-.pixel-scrollbar::-webkit-scrollbar-track {
-  background: #0B1120;
-  border: 3px solid #0B1120;
+.glass-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
 }
 
-.pixel-scrollbar::-webkit-scrollbar-thumb {
-  background: #D4AF37;
-  border: 3px solid #0B1120;
-  box-shadow: inset 0 0 0 2px #F6E8C9;
+.glass-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.62);
+  border: 2px solid rgba(15, 23, 42, 0.35);
+  border-radius: 999px;
 }
 
-.pixel-scrollbar::-webkit-scrollbar-button {
+.glass-scrollbar::-webkit-scrollbar-button {
   display: none;
 }
