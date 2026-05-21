@@ -14,6 +14,9 @@ from roguepedia.validation.card_package_validator import apply_card_package
 from roguepedia.storage.json_store import write_json
 
 
+GENERATION_MAX_ATTEMPTS = 3
+
+
 def generated_character_path(data_dir: Path, qid: str) -> Path:
     return data_dir / "generated" / "characters" / f"{qid}.json"
 
@@ -69,7 +72,7 @@ def main() -> None:
             model=settings.llm_model or "deepseek-v4-flash",
         )
         try:
-            package = generate_with_repair(client, base_character, max_attempts=2)
+            package = generate_with_repair(client, base_character, max_attempts=GENERATION_MAX_ATTEMPTS)
             character = apply_card_package(base_character, package, fallback=True)
         except Exception as exc:
             if not should_fallback_after_llm_error(exc):

@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { applyMajorStatUpgrade, chooseNode, claimBattleReward, completeNonBattleNode, createInitialRunState, effectiveStats, progressForCharacter, resetRun, xpForNextLevel } from './runEngine';
+import { applyArtifactReward, applySynergyRules } from './campaignContent';
+import { activeCharacter, applyMajorStatUpgrade, chooseNode, claimBattleReward, claimCardReward, completeNonBattleNode, createInitialRunState, effectiveStats, equipSkillCard, MAX_DECK_SIZE, MAX_PARTY_SIZE, MIN_DECK_SIZE, offerCardRewards, progressForCharacter, resetRun, retireRun, skipCardReward, switchActiveCharacter, unequipSkillCard, xpForNextLevel, type RunNodeType } from './runEngine';
 import { seedCharacter } from './seedData';
+import type { RuntimeCharacter } from './runtimeTypes';
+
+function characterFixture(id: string, name: string): RuntimeCharacter {
+  return { ...seedCharacter, id, name, cards: seedCharacter.cards.map((card) => ({ ...card, id: `${id}-${card.id}`, owner_character_id: id })) };
+}
+
+function nodeId(run: ReturnType<typeof createInitialRunState>, type: RunNodeType, row?: number): string {
+  const node = run.map.flat().find((candidate) => candidate.type === type && (row === undefined || candidate.row === row));
+  if (!node) {
+    throw new Error(`Missing ${type} node`);
+  }
+  return node.id;
+}
 
 describe('runEngine', () => {
   it('starts a run with a branching map, starter character, and level progress', () => {
@@ -8,8 +22,14 @@ describe('runEngine', () => {
 
     expect(run.phase).toBe('map');
     expect(run.party.map((character) => character.id)).toEqual([seedCharacter.id]);
+    expect(run.activeCharacterId).toBe(seedCharacter.id);
+    expect(activeCharacter(run).id).toBe(seedCharacter.id);
     expect(run.deck).toHaveLength(seedCharacter.cards.length);
-    expect(run.map[0]).toHaveLength(2);
+    expect(run.skillCollection).toHaveLength(seedCharacter.cards.length);
+    expect(run.act).toBe(1);
+    expect(run.depth).toBe(0);
+    expect(run.map[0]).toHaveLength(3);
+    expect(run.map).toHaveLength(7);
     expect(run.map[run.map.length - 1][0].type).toBe('boss');
     expect(run.characterProgress[seedCharacter.id]).toEqual({ level: 1, xp: 0, statBonuses: {}, pendingMajorUpgrade: false });
   });
@@ -36,6 +56,38 @@ describe('runEngine', () => {
     expect(seedCharacter.stats.hp).toBe(55);
   });
 
+  it('switches the active party member for the next battle', () => {
+    const ada = characterFixture('Q-ada', 'Ada');
+    const run = { ...createInitialRunState(seedCharacter), party: [seedCharacter, ada], reserveRoster: [] };
+
+    const switched = switchActiveCharacter(run, ada.id);
+    const battle = chooseNode(switched, switched.map[0][0].id);
+
+    expect(switched.activeCharacterId).toBe(ada.id);
+    expect(activeCharacter(switched).name).toBe('Ada');
+    expect(battle.combat?.player.name).toBe('Ada');
+  });
+
+  it('rebuilds combat hand and draw pile when switching during battle', () => {
+    const ada = characterFixture('Q-ada', 'Ada');
+    const battle = chooseNode({ ...createInitialRunState(seedCharacter), party: [seedCharacter, ada], reserveRoster: [] }, 'act-1-floor-1-battle-0');
+
+    const switched = switchActiveCharacter(battle, ada.id);
+
+    expect(switched.activeCharacterId).toBe(ada.id);
+    expect(switched.combat?.player.name).toBe('Ada');
+    expect(switched.combat?.hand.every((card) => card.owner_character_id === ada.id)).toBe(true);
+    expect(switched.combat?.drawPile.every((card) => card.owner_character_id === ada.id)).toBe(true);
+  });
+
+  it('ignores active character switches outside the party', () => {
+    const run = createInitialRunState(seedCharacter);
+
+    const switched = switchActiveCharacter(run, 'missing');
+
+    expect(switched).toBe(run);
+  });
+
   it('starts combat using effective HP from progression bonuses', () => {
     const run = createInitialRunState(seedCharacter);
     const boosted = {
@@ -52,39 +104,132 @@ describe('runEngine', () => {
   });
 
   it('creates distinct elite and boss encounters from map node type', () => {
-    const firstBattle = claimBattleReward(chooseNode(createInitialRunState(seedCharacter), 'act-1-battle-b'), seedCharacter.id);
-    const elite = chooseNode(firstBattle, 'act-2-elite');
-    const afterElite = claimBattleReward(elite, seedCharacter.id);
-    const secondBattle = claimBattleReward(chooseNode(afterElite, 'act-3-battle'), seedCharacter.id);
-    const boss = chooseNode(secondBattle, 'act-4-boss');
+    const run = createInitialRunState(seedCharacter);
+    const firstBattle = claimBattleReward(chooseNode(run, 'act-1-floor-1-battle-1'), seedCharacter.id);
+    const elite = chooseNode(firstBattle, 'act-1-floor-2-elite-2');
+    const bossReady = { ...firstBattle, completedNodeIds: ['act-1-floor-6-event-0'] };
+    const boss = chooseNode(bossReady, nodeId(bossReady, 'boss'));
 
-    expect(elite.combat?.enemies[0]).toMatchObject({ id: 'enemy-peer-review-warden', name: 'Peer Review Warden' });
+    expect(elite.combat?.enemies[0]).toMatchObject({ name: 'Peer Review Warden' });
     expect(elite.combat?.enemies[0].maxHp).toBeGreaterThan(42);
-    expect(boss.combat?.enemies[0]).toMatchObject({ id: 'enemy-canon-keeper', name: 'Canon Keeper' });
+    expect(boss.combat?.enemies[0].name).toContain('Canon Keeper');
     expect(boss.combat?.enemies[0].maxHp).toBeGreaterThan(elite.combat?.enemies[0].maxHp ?? 0);
   });
 
-  it('claims a battle reward, recruits a character, grants xp, and returns to map', () => {
-    const run = chooseNode(createInitialRunState(seedCharacter), 'act-1-battle-a');
+  it('applies artifact and synergy effects when combat starts', () => {
+    const run = applySynergyRules(applyArtifactReward(createInitialRunState(seedCharacter), 'spark-gap-relic'));
 
-    const next = claimBattleReward(run, seedCharacter.id);
+    const battle = chooseNode(run, 'act-1-floor-1-battle-0');
+
+    expect(battle.combat?.maxEnergy).toBe(4);
+    expect(battle.combat?.energy).toBe(4);
+    expect(battle.combat?.hand.find((card) => card.id === 'magnifying_transmitter')?.mechanics[0].amount?.base).toBe(3);
+  });
+
+  it('preserves artifact and synergy effects when switching during battle', () => {
+    const ada = characterFixture('Q-ada', 'Ada');
+    const run = applySynergyRules(applyArtifactReward({ ...createInitialRunState(seedCharacter), party: [seedCharacter, ada], reserveRoster: [] }, 'shell-fragment'));
+    const battle = chooseNode(run, 'act-1-floor-1-battle-0');
+
+    const switched = switchActiveCharacter(battle, ada.id);
+
+    expect(switched.combat?.player.block).toBeGreaterThanOrEqual(8);
+  });
+
+  it('claims a battle reward, recruits a new character, grants xp, offers cards, and returns to map', () => {
+    const recruit = characterFixture('Q-recruit', 'Recruit');
+    const run = chooseNode({ ...createInitialRunState(seedCharacter), reserveRoster: [recruit] }, 'act-1-floor-1-battle-0');
+
+    const next = claimBattleReward(run, recruit.id);
 
     expect(next.phase).toBe('map');
-    expect(next.completedNodeIds).toContain('act-1-battle-a');
+    expect(next.completedNodeIds).toContain('act-1-floor-1-battle-0');
     expect(next.party).toHaveLength(2);
     expect(next.reserveRoster).toHaveLength(0);
-    expect(next.deck).toHaveLength(seedCharacter.cards.length * 2);
+    expect(next.deck).toHaveLength(seedCharacter.cards.length + recruit.cards.length);
+    expect(next.pendingCardRewards).toHaveLength(3);
     expect(progressForCharacter(next, seedCharacter.id).xp).toBeGreaterThan(0);
-    expect(next.characterProgress[seedCharacter.id]).toBeDefined();
+    expect(next.characterProgress[recruit.id]).toBeDefined();
+  });
+
+  it('offers unique card rewards from roster decks', () => {
+    const recruit = characterFixture('Q-recruit', 'Recruit');
+    const run = { ...createInitialRunState(seedCharacter), reserveRoster: [recruit] };
+
+    const rewarded = offerCardRewards(run);
+
+    expect(rewarded.pendingCardRewards).toHaveLength(3);
+    expect(new Set(rewarded.pendingCardRewards.map((card) => card.id)).size).toBe(3);
+    expect(rewarded.pendingCardRewards.every((card) => card.id.includes('-reward-'))).toBe(true);
+  });
+
+  it('claims or skips pending card rewards', () => {
+    const rewarded = offerCardRewards(createInitialRunState(seedCharacter));
+    const card = rewarded.pendingCardRewards[0];
+
+    const claimed = claimCardReward(rewarded, card.id);
+    const skipped = skipCardReward(rewarded);
+
+    expect(claimed.skillCollection.some((deckCard) => deckCard.id === card.id)).toBe(true);
+    expect(claimed.deck.some((deckCard) => deckCard.id === card.id)).toBe(false);
+    expect(claimed.pendingCardRewards).toEqual([]);
+    expect(skipped.deck).toHaveLength(rewarded.deck.length);
+    expect(skipped.pendingCardRewards).toEqual([]);
+  });
+
+  it('equips reward skills into the active run deck for later battles', () => {
+    const rewarded = offerCardRewards(createInitialRunState(seedCharacter));
+    const reward = rewarded.pendingCardRewards[0];
+    const collected = claimCardReward(rewarded, reward.id);
+
+    const equipped = equipSkillCard(collected, reward.id);
+    const battle = chooseNode(equipped, 'act-1-floor-1-battle-0');
+
+    expect(equipped.deck.some((card) => card.id === reward.id)).toBe(true);
+    expect(battle.combat?.hand.concat(battle.combat.drawPile, battle.combat.discardPile, battle.combat.exhaustPile).some((card) => card.name === reward.name)).toBe(true);
+  });
+
+  it('unequips skills from the active run deck without deleting collection copies', () => {
+    const rewarded = offerCardRewards(createInitialRunState(seedCharacter));
+    const reward = rewarded.pendingCardRewards[0];
+    const collected = claimCardReward(rewarded, reward.id);
+    const equipped = equipSkillCard({ ...collected, deck: [...collected.deck, ...collected.deck] }, reward.id);
+
+    const unequipped = unequipSkillCard(equipped, reward.id);
+
+    expect(unequipped.deck.some((card) => card.id === reward.id)).toBe(false);
+    expect(unequipped.skillCollection.some((card) => card.id === reward.id)).toBe(true);
+  });
+
+  it('enforces minimum and maximum equipped deck size', () => {
+    const baseRun = createInitialRunState(seedCharacter);
+    const smallDeckRun = { ...baseRun, deck: baseRun.deck.slice(0, MIN_DECK_SIZE) };
+    const fullDeckRun = { ...baseRun, deck: Array.from({ length: MAX_DECK_SIZE }, (_, index) => ({ ...baseRun.deck[index % baseRun.deck.length], id: `deck-${index}` })), skillCollection: [...baseRun.skillCollection, { ...baseRun.deck[0], id: 'extra-skill', name: 'Extra Skill' }] };
+
+    expect(unequipSkillCard(smallDeckRun, smallDeckRun.deck[0].id)).toBe(smallDeckRun);
+    expect(equipSkillCard(fullDeckRun, 'extra-skill')).toBe(fullDeckRun);
+  });
+
+  it('does not recruit beyond the max party size', () => {
+    const fullParty = Array.from({ length: MAX_PARTY_SIZE }, (_, index) => characterFixture(`Q${index}`, `Hero ${index}`));
+    const recruit = characterFixture('Q-extra', 'Extra');
+    const run = chooseNode({ ...createInitialRunState(fullParty[0]), party: fullParty, reserveRoster: [recruit], activeCharacterId: fullParty[0].id }, 'act-1-floor-1-battle-0');
+
+    const next = claimBattleReward(run, recruit.id);
+
+    expect(next.party).toHaveLength(MAX_PARTY_SIZE);
+    expect(next.party.some((character) => character.id === recruit.id)).toBe(false);
+    expect(next.reserveRoster.some((character) => character.id === recruit.id)).toBe(true);
   });
 
   it('unlocks the next map row after clearing a node', () => {
-    const run = claimBattleReward(chooseNode(createInitialRunState(seedCharacter), 'act-1-battle-a'), seedCharacter.id);
+    const run = claimBattleReward(chooseNode(createInitialRunState(seedCharacter), 'act-1-floor-1-battle-0'), seedCharacter.id);
+    const restNode = run.map[1].find((node) => node.type === 'rest') ?? run.map[1][0];
 
-    const next = chooseNode(run, 'act-2-rest');
+    const next = chooseNode(run, restNode.id);
 
-    expect(next.phase).toBe('rest');
-    expect(next.currentNodeId).toBe('act-2-rest');
+    expect(next.phase).toBe(restNode.type === 'rest' ? 'rest' : 'battle');
+    expect(next.currentNodeId).toBe(restNode.id);
   });
 
   it('levels up from battle xp and applies automatic stat growth', () => {
@@ -93,7 +238,7 @@ describe('runEngine', () => {
       characterProgress: {
         [seedCharacter.id]: { level: 1, xp: xpForNextLevel(1) - 1, statBonuses: {}, pendingMajorUpgrade: false },
       },
-    }, 'act-1-battle-a');
+    }, 'act-1-floor-1-battle-0');
 
     const next = claimBattleReward(run, seedCharacter.id);
     const progress = progressForCharacter(next, seedCharacter.id);
@@ -101,7 +246,7 @@ describe('runEngine', () => {
     expect(progress.level).toBeGreaterThan(1);
     expect(progress.statBonuses.hp).toBeGreaterThanOrEqual(2);
     expect(Object.values(progress.statBonuses).some((value) => (value ?? 0) > 0)).toBe(true);
-    expect(next.summary[0]).toContain('reached Lv.');
+    expect(next.summary.some((entry) => entry.includes('reached Lv.'))).toBe(true);
   });
 
   it('marks every third level for a major stat upgrade', () => {
@@ -110,7 +255,7 @@ describe('runEngine', () => {
       characterProgress: {
         [seedCharacter.id]: { level: 2, xp: xpForNextLevel(2) - 1, statBonuses: {}, pendingMajorUpgrade: false },
       },
-    }, 'act-1-battle-a');
+    }, 'act-1-floor-1-battle-0');
 
     const next = claimBattleReward(run, seedCharacter.id);
 
@@ -132,22 +277,33 @@ describe('runEngine', () => {
     expect(progressForCharacter(next, seedCharacter.id).pendingMajorUpgrade).toBe(false);
   });
 
-  it('clears several nodes, reaches the boss, and wins the run', () => {
-    const firstBattle = claimBattleReward(chooseNode(createInitialRunState(seedCharacter), 'act-1-battle-a'), seedCharacter.id);
-    const rest = completeNonBattleNode(chooseNode(firstBattle, 'act-2-rest'));
-    const secondBattle = claimBattleReward(chooseNode(rest, 'act-3-battle'), seedCharacter.id);
-    const boss = chooseNode(secondBattle, 'act-4-boss');
+  it('clears a boss and advances to the next endless act', () => {
+    let run = claimBattleReward(chooseNode(createInitialRunState(seedCharacter), 'act-1-floor-1-battle-0'), seedCharacter.id);
+    run = completeNonBattleNode(chooseNode(run, nodeId(run, 'rest')));
+    run = claimBattleReward(chooseNode(run, nodeId(run, 'battle', 2)), seedCharacter.id);
+    run = claimBattleReward(chooseNode(run, nodeId(run, 'elite', 3)), seedCharacter.id);
+    run = claimBattleReward(chooseNode(run, nodeId(run, 'battle', 4)), seedCharacter.id);
+    run = completeNonBattleNode(chooseNode(run, nodeId(run, 'event', 5)));
+    const boss = chooseNode(run, nodeId(run, 'boss'));
 
-    const won = claimBattleReward(boss, seedCharacter.id);
+    const nextAct = claimBattleReward(boss, seedCharacter.id);
 
     expect(boss.phase).toBe('battle');
-    expect(boss.currentNodeId).toBe('act-4-boss');
-    expect(won.phase).toBe('won');
-    expect(won.completedNodeIds).toEqual(['act-1-battle-a', 'act-2-rest', 'act-3-battle', 'act-4-boss']);
+    expect(nextAct.phase).toBe('map');
+    expect(nextAct.act).toBe(2);
+    expect(nextAct.completedNodeIds).toEqual([]);
+    expect(nextAct.map[0][0].id).toContain('act-2-floor-1');
+  });
+
+  it('can retire an endless run', () => {
+    const retired = retireRun(createInitialRunState(seedCharacter));
+
+    expect(retired.phase).toBe('lost');
+    expect(retired.summary[0]).toContain('Retired');
   });
 
   it('resets the run to a fresh map', () => {
-    const run = claimBattleReward(chooseNode(createInitialRunState(seedCharacter), 'act-1-battle-a'), seedCharacter.id);
+    const run = claimBattleReward(chooseNode(createInitialRunState(seedCharacter), 'act-1-floor-1-battle-0'), seedCharacter.id);
 
     const next = resetRun(run);
 

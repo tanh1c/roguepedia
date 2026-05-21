@@ -23,6 +23,14 @@ class ValidationReport(BaseModel):
     rejected_reasons: list[str] = Field(default_factory=list)
 
 
+class DeckPreset(BaseModel):
+    id: str
+    name: str
+    archetype: str
+    description: str
+    cards: list[Card]
+
+
 class GameCharacter(BaseModel):
     id: str
     name: str
@@ -40,6 +48,7 @@ class GameCharacter(BaseModel):
     stats: CharacterStats
     tags: list[str]
     cards: list[Card]
+    deck_presets: list[DeckPreset] = Field(default_factory=list)
     passive_trait: PassiveTrait | None = None
 
     lore: str

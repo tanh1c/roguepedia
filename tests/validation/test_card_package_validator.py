@@ -68,6 +68,29 @@ def test_validates_grounded_mechanically_valid_package():
     assert report.rejected_reasons == []
 
 
+def test_accepts_grounding_keywords_backed_by_lore():
+    report = validate_card_package(make_character(), make_package(keyword="electrical engineer"))
+
+    assert report.grounded is True
+    assert report.rejected_reasons == []
+
+
+def test_accepts_grounding_keywords_with_lore_backed_terms():
+    report = validate_card_package(make_character(), make_package(keyword="electrical spark"))
+
+    assert report.grounded is True
+    assert report.rejected_reasons == []
+
+
+def test_accepts_keywords_backed_by_package_lore():
+    package = make_package(keyword="battlefield")
+
+    report = validate_card_package(make_character(), package)
+
+    assert report.grounded is True
+    assert report.rejected_reasons == []
+
+
 def test_rejects_ungrounded_package_keywords():
     report = validate_card_package(make_character(), make_package(keyword="dragon"))
 

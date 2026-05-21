@@ -5,7 +5,7 @@ from roguepedia.engines.rarity_engine import infer_rarity
 from roguepedia.engines.role_engine import infer_role
 from roguepedia.engines.stat_engine import infer_stats
 from roguepedia.engines.tag_engine import infer_tags
-from roguepedia.generation.card_templates import build_template_cards, build_template_passive
+from roguepedia.generation.card_templates import build_template_cards, build_template_deck_presets, build_template_passive
 from roguepedia.schemas.character import GameCharacter, ValidationReport
 from roguepedia.schemas.evidence import EvidenceResult
 from roguepedia.schemas.profile import EntityProfile
@@ -77,6 +77,20 @@ def assemble_no_llm_character_with_cards(profile: EntityProfile) -> GameCharacte
         role=character.role,
         stats=character.stats,
         grounding_keywords=character.tags,
+        rarity=character.rarity,
+        tags=character.tags,
+    )
+    deck_presets = build_template_deck_presets(
+        character_id=character.id,
+        character_name=character.name,
+        domain=character.domain,
+        character_class=character.character_class,
+        role=character.role,
+        stats=character.stats,
+        grounding_keywords=character.tags,
+        rarity=character.rarity,
+        tags=character.tags,
+        core_cards=cards,
     )
     passive = build_template_passive(
         character_id=character.id,
@@ -87,6 +101,7 @@ def assemble_no_llm_character_with_cards(profile: EntityProfile) -> GameCharacte
         grounding_keywords=character.tags,
     )
     character.cards = cards
+    character.deck_presets = deck_presets
     character.passive_trait = passive
     character.validation.mechanics_valid = True
     character.validation.balance_valid = True

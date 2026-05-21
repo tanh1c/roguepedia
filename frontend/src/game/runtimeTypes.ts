@@ -57,6 +57,14 @@ export type RuntimeCard = {
 
 export type CharacterRarity = 'D' | 'C' | 'B' | 'A' | 'S';
 
+export type RuntimeDeckPreset = {
+  id: string;
+  name: string;
+  archetype: string;
+  description: string;
+  cards: RuntimeCard[];
+};
+
 export type RuntimeCharacter = {
   id: string;
   name: string;
@@ -82,4 +90,5 @@ export type RuntimeCharacter = {
   lore: string;
   short_lore: string;
   cards: RuntimeCard[];
+  deck_presets?: RuntimeDeckPreset[];
 };
