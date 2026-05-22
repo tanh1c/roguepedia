@@ -30,6 +30,9 @@ class EntityProfile(BaseModel):
 
     wikipedia_summary: str | None = None
     wikipedia_extract: str | None = None
+    wiki_word_count: int = 0
+    wiki_reference_count: int = 0
+    wiki_article_length: int = 0
 
     sitelinks_count: int = 0
     claims_count: int = 0

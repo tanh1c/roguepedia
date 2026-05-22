@@ -116,13 +116,21 @@ def test_infers_tank_role_for_organism_profile():
     assert any(e.field == "entity_type" for e in result.evidence)
 
 
-def test_rarity_scales_with_source_coverage():
-    profile = make_profile(sitelinks_count=120, claims_count=250)
+def test_rarity_scales_with_wikipedia_article_coverage():
+    short_profile = make_profile(wiki_word_count=500, wiki_reference_count=3)
+    medium_profile = make_profile(wiki_word_count=4800, wiki_reference_count=40)
+    long_profile = make_profile(wiki_word_count=9000, wiki_reference_count=120)
+    exceptional_profile = make_profile(wiki_word_count=17000, wiki_reference_count=180)
 
-    result = infer_rarity(profile)
+    assert infer_rarity(short_profile).value == "common"
+    assert infer_rarity(medium_profile).value == "common"
+    assert infer_rarity(long_profile).value == "uncommon"
 
-    assert result.value == "legendary"
-    assert result.score >= 80
+    exceptional_result = infer_rarity(exceptional_profile)
+
+    assert exceptional_result.value == "legendary"
+    assert exceptional_result.score >= 92
+    assert any(e.field == "wiki_word_count" for e in exceptional_result.evidence)
 
 
 def test_stats_boost_intelligence_for_scholar_class():
@@ -141,6 +149,18 @@ def test_stats_boost_survival_and_defense_for_survivor_tank():
 
     assert stats.survival >= 75
     assert stats.defense >= 70
+
+
+def test_stats_scale_with_wikipedia_words_and_references():
+    low_profile = make_profile(wiki_word_count=200, wiki_reference_count=1)
+    high_profile = make_profile(wiki_word_count=10000, wiki_reference_count=160)
+
+    low_stats = infer_stats(low_profile, character_class="scholar", role="support", domain="science")
+    high_stats = infer_stats(high_profile, character_class="scholar", role="support", domain="science")
+
+    assert sum(high_stats.model_dump().values()) > sum(low_stats.model_dump().values())
+    assert high_stats.intelligence > low_stats.intelligence
+    assert high_stats.influence > low_stats.influence
 
 
 def test_tags_include_domain_class_and_source_keywords():

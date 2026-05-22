@@ -1,9 +1,19 @@
+from roguepedia.generation.card_pool_builder import CharacterCardProfile, build_deck_presets, build_pool_cards
+from roguepedia.generation.signature_cards import build_signature_cards
 from roguepedia.schemas.card import Card, CardAmount, CardMechanic, GroundingInfo, PassiveTrait
-from roguepedia.schemas.character import CharacterStats
+from roguepedia.schemas.character import CharacterStats, DeckPreset
 
 BASIC_DAMAGE = 8
 BASIC_SHIELD = 7
 BASIC_HEAL = 5
+
+
+CHARACTER_RARITY_TO_POOL_RARITY = {
+    "common": "C",
+    "uncommon": "B",
+    "rare": "A",
+    "legendary": "S",
+}
 
 
 def grounding(character_name: str, keywords: list[str]) -> GroundingInfo:
@@ -23,7 +33,64 @@ def build_template_cards(
     role: str,
     stats: CharacterStats,
     grounding_keywords: list[str],
+    rarity: str = "C",
+    tags: list[str] | None = None,
 ) -> list[Card]:
+    try:
+        profile = character_card_profile(character_id, domain, character_class, role, rarity, tags)
+        return build_pool_cards(profile, character_name=character_name, grounding_keywords=grounding_keywords) + build_signature_cards(
+            profile,
+            character_name=character_name,
+            grounding_keywords=grounding_keywords,
+        )
+    except Exception:
+        return fallback_template_cards(character_id, character_name, domain, character_class, role, grounding_keywords)
+
+
+def build_template_deck_presets(
+    *,
+    character_id: str,
+    character_name: str,
+    domain: str,
+    character_class: str,
+    role: str,
+    stats: CharacterStats,
+    grounding_keywords: list[str],
+    rarity: str = "C",
+    tags: list[str] | None = None,
+    core_cards: list[Card] | None = None,
+) -> list[DeckPreset]:
+    try:
+        profile = character_card_profile(character_id, domain, character_class, role, rarity, tags)
+        core = core_cards or build_template_cards(
+            character_id=character_id,
+            character_name=character_name,
+            domain=domain,
+            character_class=character_class,
+            role=role,
+            stats=stats,
+            grounding_keywords=grounding_keywords,
+            rarity=rarity,
+            tags=tags,
+        )
+        return build_deck_presets(profile, character_name=character_name, grounding_keywords=grounding_keywords, core_cards=core)
+    except Exception:
+        core = core_cards or fallback_template_cards(character_id, character_name, domain, character_class, role, grounding_keywords)
+        return [DeckPreset(id="core", name="Core Codex", archetype="balanced", description="A balanced fallback deck.", cards=core)]
+
+
+def character_card_profile(character_id: str, domain: str, character_class: str, role: str, rarity: str, tags: list[str] | None) -> CharacterCardProfile:
+    return CharacterCardProfile(
+        character_id=character_id,
+        domain=domain,
+        role=role,
+        character_class=character_class,
+        tags=tags or [],
+        rarity=CHARACTER_RARITY_TO_POOL_RARITY.get(rarity, rarity),
+    )
+
+
+def fallback_template_cards(character_id: str, character_name: str, domain: str, character_class: str, role: str, grounding_keywords: list[str]) -> list[Card]:
     if domain == "nature" or character_class == "survivor" or role == "tank":
         return nature_survival_cards(character_id, character_name, grounding_keywords)
     if domain == "strategy" or character_class == "tactician" or role == "control":

@@ -39,11 +39,28 @@ class RawEntityCollector:
         wikidata = self.wikidata_client.get_entity(qid, language=language)
         title = label or self._label_from_entity(wikidata, language) or qid
         wikipedia = self.wikipedia_client.get_summary(title)
+        page = self.wikipedia_client.get_page_metrics(wikipedia.title)
+        wikipedia_raw = {
+            "summary": wikipedia.raw,
+            "page": page.raw,
+            "metrics": {
+                "word_count": page.word_count,
+                "reference_count": page.reference_count,
+                "article_length": page.article_length,
+            },
+        }
 
         write_json(self.data_dir / "raw" / "wikidata" / f"{qid}.json", wikidata)
-        write_json(self.data_dir / "raw" / "wikipedia" / f"{qid}.json", wikipedia.raw)
+        write_json(self.data_dir / "raw" / "wikipedia" / f"{qid}.json", wikipedia_raw)
 
-        return RawEntityResult(qid=qid, label=title, wikidata=wikidata, wikipedia=wikipedia)
+        wikipedia_result = WikipediaSummary(
+            title=wikipedia.title,
+            extract=wikipedia.extract,
+            url=wikipedia.url,
+            image_url=wikipedia.image_url,
+            raw=wikipedia_raw,
+        )
+        return RawEntityResult(qid=qid, label=title, wikidata=wikidata, wikipedia=wikipedia_result)
 
     def _label_from_entity(self, entity: dict[str, Any], language: str) -> str | None:
         return entity.get("labels", {}).get(language, {}).get("value")

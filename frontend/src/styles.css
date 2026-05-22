@@ -2,7 +2,7 @@
 
 @theme {
   --font-serif: "Playfair Display", ui-serif, Georgia, serif;
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Geist", "Outfit", ui-sans-serif, system-ui, sans-serif;
 
   --color-rp-beige-bg: #F4F1EA;
   --color-rp-dark: #1E293B;
@@ -13,7 +13,7 @@
 
 body {
   font-family: var(--font-sans);
-  background-color: var(--color-rp-dark);
+  background: #06070B;
   margin: 0;
   overflow: hidden;
 }
@@ -26,61 +26,245 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.pixel-art {
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.72);
+  outline-offset: 2px;
 }
 
-.pixel-panel {
-  border: 16px solid transparent;
-  border-image: url('/assets/ui/pixel-panel.svg') 16 fill stretch;
-  image-rendering: pixelated;
+.rp-shell {
+  position: relative;
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  max-width: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 1rem;
+  background: #06070B;
+  color: white;
+  font-family: var(--font-sans);
+  isolation: isolate;
+  user-select: text;
 }
 
-.pixel-dark-panel {
-  border: 16px solid transparent;
-  border-image: url('/assets/ui/pixel-dark-panel.svg') 16 fill stretch;
-  image-rendering: pixelated;
+.rp-galaxy-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-image: var(--galaxy-background), radial-gradient(circle at 50% 20%, rgba(59, 130, 246, 0.35), transparent 36%), linear-gradient(135deg, #06070B, #101427 55%, #05060a);
+  background-position: center;
+  background-size: cover;
+  transform: scale(1.025);
 }
 
-.pixel-button {
-  border: 12px solid transparent;
-  border-image: url('/assets/ui/pixel-button.svg') 12 fill stretch;
-  image-rendering: pixelated;
+.rp-atmosphere {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: radial-gradient(circle at 18% 8%, rgba(255,244,214,0.20), transparent 24%), radial-gradient(circle at 78% 4%, rgba(218,199,150,0.14), transparent 22%), linear-gradient(180deg, rgba(6,7,11,var(--rp-overlay-top)), rgba(6,7,11,var(--rp-overlay-bottom)));
+  pointer-events: none;
 }
 
-.pixel-card-attack {
-  border: 18px solid transparent;
-  border-image: url('/assets/ui/pixel-card-attack.svg') 18 fill stretch;
-  image-rendering: pixelated;
+.overlay-soft {
+  --rp-overlay-top: 0.25;
+  --rp-overlay-bottom: 0.58;
 }
 
-.pixel-card-skill {
-  border: 18px solid transparent;
-  border-image: url('/assets/ui/pixel-card-skill.svg') 18 fill stretch;
-  image-rendering: pixelated;
+.overlay-balanced {
+  --rp-overlay-top: 0.38;
+  --rp-overlay-bottom: 0.72;
 }
 
-.pixel-scrollbar {
-  scrollbar-color: #D4AF37 #0B1120;
+.overlay-dark {
+  --rp-overlay-top: 0.58;
+  --rp-overlay-bottom: 0.86;
+}
+
+.backdrop-animated .rp-galaxy-backdrop {
+  animation: galaxy-drift 24s ease-in-out infinite alternate;
+}
+
+@keyframes galaxy-drift {
+  from {
+    filter: saturate(1) brightness(0.96);
+    transform: scale(1.025) translate3d(-0.4%, -0.4%, 0);
+  }
+  to {
+    filter: saturate(1.16) brightness(1.06);
+    transform: scale(1.055) translate3d(0.6%, 0.4%, 0);
+  }
+}
+
+.gallery-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 236px 314px;
+}
+
+.galaxy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.55rem;
+}
+
+.galaxy-option {
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.045);
+  color: white;
+  padding: 0;
+  text-align: left;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.10);
+  transition: transform 220ms ease, border-color 220ms ease, background 220ms ease;
+}
+
+.galaxy-option:hover,
+.galaxy-option.is-active {
+  border-color: rgba(255,255,255,0.32);
+  background: rgba(255,255,255,0.085);
+  transform: translateY(-1px);
+}
+
+.galaxy-option.is-active {
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.16), 0 0 0 1px rgba(255,255,255,0.12);
+}
+
+.galaxy-option__image {
+  display: block;
+  height: 112px;
+  background-size: cover;
+  background-position: center;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+  filter: saturate(0.9) contrast(1.05);
+}
+
+.galaxy-option__copy {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem;
+}
+
+.galaxy-option strong,
+.segmented-control strong,
+.settings-switch strong {
+  color: rgba(255,255,255,0.92);
+  font-size: 0.82rem;
+}
+
+.galaxy-option small,
+.segmented-control small,
+.settings-switch small {
+  color: rgba(255,255,255,0.48);
+  font-size: 0.68rem;
+}
+
+.segmented-control,
+.settings-toggles {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.segmented-control button,
+.settings-switch {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.045);
+  color: white;
+  padding: 0.85rem;
+  text-align: left;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.10);
+  transition: background 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.segmented-control button:hover,
+.settings-switch:hover {
+  border-color: rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.08);
+  transform: translateY(-1px);
+}
+
+.segmented-control button.is-active,
+.settings-switch.is-active {
+  border-color: rgba(255,244,214,0.34);
+  background: rgba(255,244,214,0.10);
+}
+
+.segmented-control strong,
+.segmented-control small,
+.settings-switch strong,
+.settings-switch small {
+  display: block;
+}
+
+.settings-switch i {
+  align-self: center;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.62);
+  padding: 0.35rem 0.6rem;
+  font-style: normal;
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.settings-switch.is-active i {
+  background: rgba(255,244,214,0.16);
+  color: rgba(255,255,255,0.90);
+}
+
+.glass-panel,
+.glass-dark-panel {
+  border: 1px solid rgba(255, 244, 214, 0.24);
+  border-radius: 14px;
+  background: rgba(12, 14, 20, 0.48);
+  backdrop-filter: blur(16px);
+  box-shadow: inset 0 1px 1px rgba(255, 244, 214, 0.14), 0 18px 54px rgba(0, 0, 0, 0.42), 0 0 34px rgba(218, 199, 150, 0.12);
+}
+
+.glass-button {
+  border: 1px solid rgba(255, 244, 214, 0.30);
+  border-radius: 8px;
+  background: rgba(255, 244, 214, 0.10);
+  backdrop-filter: blur(16px);
+  box-shadow: inset 0 1px 1px rgba(255, 244, 214, 0.14), 0 10px 30px rgba(0, 0, 0, 0.34), 0 0 24px rgba(218, 199, 150, 0.12);
+}
+
+.glass-button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+button,
+section,
+img,
+[role="button"] {
+  border-radius: 8px;
+}
+
+.glass-scrollbar {
+  scrollbar-color: rgba(255, 255, 255, 0.65) rgba(255, 255, 255, 0.08);
   scrollbar-width: thin;
 }
 
-.pixel-scrollbar::-webkit-scrollbar {
-  height: 14px;
+.glass-scrollbar::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
 }
 
-.pixel-scrollbar::-webkit-scrollbar-track {
-  background: #0B1120;
-  border: 3px solid #0B1120;
+.glass-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
 }
 
-.pixel-scrollbar::-webkit-scrollbar-thumb {
-  background: #D4AF37;
-  border: 3px solid #0B1120;
-  box-shadow: inset 0 0 0 2px #F6E8C9;
+.glass-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.62);
+  border: 2px solid rgba(15, 23, 42, 0.35);
+  border-radius: 999px;
 }
 
-.pixel-scrollbar::-webkit-scrollbar-button {
+.glass-scrollbar::-webkit-scrollbar-button {
   display: none;
 }

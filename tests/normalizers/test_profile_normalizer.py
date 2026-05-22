@@ -64,3 +64,40 @@ def test_uses_wikipedia_sitelink_title_when_english_label_is_missing():
     profile = normalize_entity_profile(wikidata, None)
 
     assert profile.name == "Marie Curie"
+
+
+def test_normalizes_wikipedia_article_metrics():
+    wikidata = {
+        "id": "Q1",
+        "labels": {"en": {"value": "Example"}},
+        "claims": {},
+        "sitelinks": {"enwiki": {"title": "Example"}},
+    }
+    wikipedia = {
+        "summary": {"title": "Example", "extract": "Short summary."},
+        "metrics": {"word_count": 7200, "reference_count": 180, "article_length": 42000},
+    }
+
+    profile = normalize_entity_profile(wikidata, wikipedia)
+
+    assert profile.wikipedia_summary == "Short summary."
+    assert profile.wiki_word_count == 7200
+    assert profile.wiki_reference_count == 180
+    assert profile.wiki_article_length == 42000
+
+
+def test_summary_only_wikipedia_payload_defaults_metrics_to_zero():
+    wikidata = {
+        "id": "Q1",
+        "labels": {"en": {"value": "Example"}},
+        "claims": {},
+        "sitelinks": {"enwiki": {"title": "Example"}},
+    }
+    wikipedia = {"title": "Example", "extract": "Old summary shape."}
+
+    profile = normalize_entity_profile(wikidata, wikipedia)
+
+    assert profile.wikipedia_summary == "Old summary shape."
+    assert profile.wiki_word_count == 0
+    assert profile.wiki_reference_count == 0
+    assert profile.wiki_article_length == 0

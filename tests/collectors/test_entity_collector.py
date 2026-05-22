@@ -26,6 +26,18 @@ class FakeWikipediaClient:
             },
         )()
 
+    def get_page_metrics(self, title: str):
+        return type(
+            "PageMetrics",
+            (),
+            {
+                "word_count": 1234,
+                "reference_count": 12,
+                "article_length": 6789,
+                "raw": {"parse": {"title": title}},
+            },
+        )()
+
 
 def test_collect_by_name_saves_raw_payloads(tmp_path: Path):
     collector = RawEntityCollector(
@@ -37,6 +49,12 @@ def test_collect_by_name_saves_raw_payloads(tmp_path: Path):
     result = collector.collect_by_name("Nikola Tesla")
 
     assert result.qid == "Q9036"
+    assert result.wikipedia.raw["metrics"]["word_count"] == 1234
     assert (tmp_path / "raw" / "wikidata" / "Q9036.json").exists()
     assert (tmp_path / "raw" / "wikipedia" / "Q9036.json").exists()
+    wikipedia_raw = read_json(tmp_path / "raw" / "wikipedia" / "Q9036.json")
+
     assert read_json(tmp_path / "raw" / "wikidata" / "Q9036.json")["id"] == "Q9036"
+    assert wikipedia_raw["summary"]["title"] == "Nikola Tesla"
+    assert wikipedia_raw["page"]["parse"]["title"] == "Nikola Tesla"
+    assert wikipedia_raw["metrics"] == {"word_count": 1234, "reference_count": 12, "article_length": 6789}

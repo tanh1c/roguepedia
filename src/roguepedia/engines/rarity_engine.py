@@ -3,12 +3,15 @@ from roguepedia.schemas.profile import EntityProfile
 
 
 def infer_rarity(profile: EntityProfile) -> EvidenceResult:
-    score = min(100.0, profile.sitelinks_count * 0.5 + profile.claims_count * 0.2)
-    if score >= 80:
+    length_score = min(75.0, profile.wiki_word_count / 220.0)
+    reference_score = min(25.0, profile.wiki_reference_count * 0.10)
+    score = min(100.0, length_score + reference_score)
+
+    if score >= 92:
         rarity = "legendary"
-    elif score >= 50:
+    elif score >= 72:
         rarity = "rare"
-    elif score >= 25:
+    elif score >= 45:
         rarity = "uncommon"
     else:
         rarity = "common"
@@ -17,7 +20,7 @@ def infer_rarity(profile: EntityProfile) -> EvidenceResult:
         value=rarity,
         score=score,
         evidence=[
-            EvidenceItem(field="sitelinks_count", matched=str(profile.sitelinks_count), weight=0.5),
-            EvidenceItem(field="claims_count", matched=str(profile.claims_count), weight=0.2),
+            EvidenceItem(field="wiki_word_count", matched=str(profile.wiki_word_count), weight=1 / 220),
+            EvidenceItem(field="wiki_reference_count", matched=str(profile.wiki_reference_count), weight=0.10),
         ],
     )

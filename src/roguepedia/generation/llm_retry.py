@@ -9,7 +9,7 @@ def generate_with_repair(client: LLMClient, character: GameCharacter, *, max_att
     last_error: ValueError | None = None
     for _ in range(max_attempts):
         prompt = build_card_generation_prompt(character, repair_note=repair_note)
-        response = client.complete(LLMRequest(prompt=prompt))
+        response = client.complete(LLMRequest(prompt=prompt, temperature=0.0))
         try:
             return parse_card_package_json(response.text)
         except ValueError as exc:

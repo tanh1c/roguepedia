@@ -103,6 +103,70 @@ def test_parse_card_package_json_rejects_invalid_json():
         parse_card_package_json("not json")
 
 
+def test_parse_card_package_json_normalizes_common_llm_schema_drift():
+    payload = json.loads(valid_package_json())
+    payload["cards"][0]["mechanics"][0]["target"] = "enemy_single"
+    payload["cards"][0]["mechanics"][0].pop("amount")
+    payload["cards"][0]["mechanics"][0]["value"] = 8
+    payload["cards"][0]["mechanics"][0]["stat"] = "intelligence"
+    payload["cards"][0]["grounding"] = "inspired by invention"
+    payload["cards"].append(
+        {
+            **payload["cards"][0],
+            "id": "Q9036-condition",
+            "mechanics": [{"kind": "conditional", "condition": "if focused"}],
+        }
+    )
+    payload["cards"].append(
+        {
+            **payload["cards"][0],
+            "id": "Q9036-position",
+            "mechanics": [{"kind": "move_position", "target": "self", "value": "back"}],
+        }
+    )
+    payload["cards"].append(
+        {
+            **payload["cards"][0],
+            "id": "Q9036-buff",
+            "mechanics": [{"kind": "buff_stat", "target": "self", "value": 2, "stat": "intelligence"}],
+        }
+    )
+    payload["cards"].append(
+        {
+            **payload["cards"][0],
+            "id": "Q9036-status",
+            "mechanics": [{"kind": "apply_status", "target": "selected_enemy", "status": "vulnerable"}],
+        }
+    )
+    payload["cards"].append(
+        {
+            **payload["cards"][0],
+            "id": "Q9036-direct-base",
+            "mechanics": [{"kind": "draw_cards", "target": "self", "base": 1}],
+        }
+    )
+    payload["cards"].append(
+        {
+            **payload["cards"][0],
+            "id": "Q9036-missing-amount",
+            "mechanics": [{"kind": "damage", "target": "selected_enemy"}],
+        }
+    )
+
+    package = parse_card_package_json(json.dumps(payload))
+
+    assert package.cards[0].mechanics[0].target == "selected_enemy"
+    assert package.cards[0].mechanics[0].amount.base == 8
+    assert package.cards[0].mechanics[0].amount.scaling_stat == "intelligence"
+    assert package.cards[0].grounding.inspired_by == "inspired by invention"
+    assert package.cards[-6].mechanics[0].target == "self"
+    assert package.cards[-5].mechanics[0].amount is None
+    assert package.cards[-4].mechanics[0].status == "intelligence"
+    assert package.cards[-3].mechanics[0].duration == 1
+    assert package.cards[-2].mechanics[0].amount.base == 1
+    assert package.cards[-1].mechanics[0].amount.base == 6
+
+
 def test_generate_with_repair_retries_after_invalid_response():
     client = FakeLLMClient(["not json", valid_package_json()])
 
@@ -111,3 +175,11 @@ def test_generate_with_repair_retries_after_invalid_response():
     assert package.cards[0].name == "Spark Gap"
     assert len(client.requests) == 2
     assert "Previous response failed" in client.requests[1].prompt
+
+
+def test_generate_with_repair_uses_deterministic_temperature():
+    client = FakeLLMClient([valid_package_json()])
+
+    generate_with_repair(client, make_character(), max_attempts=1)
+
+    assert client.requests[0].temperature == 0.0
