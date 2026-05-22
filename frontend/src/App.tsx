@@ -1,4 +1,4 @@
-import { type ReactNode, useRef, useState } from 'react';
+import { memo, type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
 import frameA from './assets/frames/A-tier.png';
 import frameB from './assets/frames/B-tier.png';
 import frameC from './assets/frames/C-tier.png';
@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { applyBattleReward, applyEventChoice, applyRestChoice, applySynergyRules, ARTIFACTS, EVENT_CHOICES } from './game/campaignContent';
 import { endPlayerTurn, playCard, type CombatState } from './game/combatEngine';
-import { activeCharacter, applyMajorStatUpgrade, claimBattleReward, claimCardReward, chooseNode, completeNonBattleNode, createInitialRunState, effectiveStats, equipSkillCard, isNodeAvailable, MAX_DECK_SIZE, MAX_PARTY_SIZE, MIN_DECK_SIZE, progressForCharacter, resetRun, retireRun, skipCardReward, switchActiveCharacter, unequipSkillCard, xpForNextLevel, type CharacterProgress, type CharacterStatKey, type RunNodeType } from './game/runEngine';
+import { activeCharacter, applyMajorStatUpgrade, claimBattleReward, claimCardReward, chooseNode, completeNonBattleNode, createInitialRunState, effectiveStats, equipSkillCard, isNodeAvailable, MAX_DECK_SIZE, MAX_PARTY_SIZE, MAX_REWARD_PACK_SIZE, MIN_DECK_SIZE, progressForCharacter, resetRun, retireRun, skipCardReward, switchActiveCharacter, unequipSkillCard, xpForNextLevel, type CharacterProgress, type CharacterStatKey, type RewardCardPack, type RunNodeType } from './game/runEngine';
 import { runtimeRoster } from './game/roster';
 import exportedSkillCodex from './game/skillCodex.json';
 import { DEFAULT_SETTINGS, GALAXY_BACKGROUNDS, loadRunSnapshot, loadSettings, saveRunSnapshot, saveSettings, selectedGalaxyBackground, updateSettings, type GameSettings, type OverlayIntensity } from './game/settings';
@@ -91,10 +91,12 @@ export function App() {
   const combat = run.combat;
   const livingEnemies = combat?.enemies.filter((enemy) => enemy.hp > 0) ?? [];
   const selectedEnemy = combat?.enemies.find((enemy) => enemy.id === selectedEnemyId) ?? combat?.enemies[0];
-  const hand = combat?.hand ?? run.deck.slice(0, 5);
+  const hand = combat ? combat.hand : run.deck;
   const recruitChoices = run.reserveRoster.filter((character) => !run.party.some((partyMember) => partyMember.id === character.id)).slice(0, 3);
   const canEndTurn = Boolean(combat && combat.phase === 'player');
 
+  const chooseCardReward = useCallback((cardId: string) => setRun((currentRun) => claimCardReward(currentRun, cardId)), []);
+  const skipPendingCardReward = useCallback(() => setRun((currentRun) => skipCardReward(currentRun)), []);
   const save = () => setSavedSnapshot(saveRunSnapshot(run));
   const load = () => {
     const restored = savedSnapshot ? loadRunSnapshot(savedSnapshot) : null;
@@ -205,7 +207,7 @@ export function App() {
             progress={progressForCharacter(run, pendingUpgradeCharacter.id)}
             onChoose={(stat) => setRun(applyMajorStatUpgrade(run, pendingUpgradeCharacter.id, stat))}
           /> : null}
-          {run.pendingCardRewards.length ? <CardRewardOverlay cards={run.pendingCardRewards} onChoose={(cardId) => setRun(claimCardReward(run, cardId))} onSkip={() => setRun(skipCardReward(run))} /> : null}
+          {run.pendingCardRewards.length ? <CardRewardOverlay cards={run.pendingCardRewards} onChoose={chooseCardReward} onSkip={skipPendingCardReward} /> : null}
           <CommandDock
             artifactCount={run.artifacts.length}
             characterName={currentCharacter.name}
@@ -851,20 +853,28 @@ function InventoryWindow({ run, onArtifact }: { run: ReturnType<typeof createIni
 }
 
 function DeckLabWindow({ roster, run, onEquipSkill, onUnequipSkill }: { roster: typeof runtimeRoster; run: ReturnType<typeof createInitialRunState>; onEquipSkill: (cardId: string) => void; onUnequipSkill: (cardId: string) => void }) {
-  const skillCodex = collectSkillCodex(roster, run.skillCollection ?? run.deck, globalSkillCodex, run.deck);
+  const collection = run.skillCollection ?? run.deck;
+  const skillCodex = useMemo(() => collectSkillCodex(roster, collection, globalSkillCodex, run.deck), [collection, roster, run.deck]);
   const [selectedCardId, setSelectedCardId] = useState(skillCodex[0]?.card.id ?? '');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [ownershipFilter, setOwnershipFilter] = useState<'all' | 'owned' | 'locked'>('all');
-  const cardsByType = skillCodex.reduce<Record<string, SkillCodexEntry[]>>((groups, entry) => ({ ...groups, [entry.card.card_type]: [...(groups[entry.card.card_type] ?? []), entry] }), {});
-  const collection = run.skillCollection ?? run.deck;
-  const duplicateCount = run.deck.length - new Set(run.deck.map((card) => card.name)).size;
-  const equippedIds = new Set(run.deck.map((card) => card.id));
+  const cardsByType = useMemo(() => {
+    const groups: Record<string, SkillCodexEntry[]> = {};
+    for (const entry of skillCodex) {
+      (groups[entry.card.card_type] ??= []).push(entry);
+    }
+    return groups;
+  }, [skillCodex]);
+  const duplicateCount = useMemo(() => run.deck.length - new Set(run.deck.map((card) => card.name)).size, [run.deck]);
+  const equippedIds = useMemo(() => new Set(run.deck.map((card) => card.id)), [run.deck]);
+  const lockedCount = useMemo(() => skillCodex.filter((entry) => !entry.owned).length, [skillCodex]);
   const canEquipMore = run.deck.length < MAX_DECK_SIZE;
   const canUnequipMore = run.deck.length > MIN_DECK_SIZE;
-  const visibleCards = skillCodex
+  const visibleCards = useMemo(() => skillCodex
     .filter((entry) => typeFilter === 'all' || entry.card.card_type === typeFilter)
-    .filter((entry) => ownershipFilter === 'all' || (ownershipFilter === 'owned' ? entry.owned : !entry.owned));
-  const selectedEntry = skillCodex.find((entry) => entry.card.id === selectedCardId) ?? visibleCards[0] ?? skillCodex[0];
+    .filter((entry) => ownershipFilter === 'all' || (ownershipFilter === 'owned' ? entry.owned : !entry.owned)), [ownershipFilter, skillCodex, typeFilter]);
+  const selectedEntry = useMemo(() => skillCodex.find((entry) => entry.card.id === selectedCardId) ?? visibleCards[0] ?? skillCodex[0], [selectedCardId, skillCodex, visibleCards]);
+  const selectCard = useCallback((cardId: string) => setSelectedCardId(cardId), []);
 
   return (
     <div className="grid min-h-[68vh] grid-cols-[260px_minmax(0,1fr)_320px] gap-4">
@@ -874,7 +884,7 @@ function DeckLabWindow({ roster, run, onEquipSkill, onUnequipSkill }: { roster: 
             <HeaderStat label="Equipped" value={`${run.deck.length}/${MAX_DECK_SIZE}`} />
             <HeaderStat label="Minimum" value={String(MIN_DECK_SIZE)} />
             <HeaderStat label="Copies" value={String(duplicateCount)} />
-            <HeaderStat label="Locked" value={String(skillCodex.filter((entry) => !entry.owned).length)} />
+            <HeaderStat label="Locked" value={String(lockedCount)} />
           </div>
           <p className="leading-relaxed">Equip {MIN_DECK_SIZE}-{MAX_DECK_SIZE} skills. You can tune the active deck before the next battle, while locked skills remain global codex previews.</p>
           <div className="grid grid-cols-3 gap-1 rounded-[12px] border border-white/10 bg-black/24 p-1">
@@ -888,7 +898,7 @@ function DeckLabWindow({ roster, run, onEquipSkill, onUnequipSkill }: { roster: 
       </Panel>
       <Panel title={`Skill Codex (${visibleCards.length})`}>
         <div className="glass-scrollbar grid max-h-[62vh] grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-2 overflow-y-auto pr-1">
-          {visibleCards.map((entry, index) => <button className={`relative overflow-hidden rounded-[14px] border text-left transition hover:-translate-y-0.5 hover:bg-white/[0.08] ${selectedEntry?.card.id === entry.card.id ? 'border-white/35 bg-white/[0.10]' : 'border-white/10 bg-black/18'} ${entry.owned ? 'shadow-[0_0_22px_rgba(255,255,255,0.08)]' : 'opacity-58 grayscale'}`} key={`${entry.card.id}-${index}`} onClick={() => setSelectedCardId(entry.card.id)} type="button"><CardSummary card={entry.card} />{entry.owned ? null : <div className="pointer-events-none absolute inset-0 grid place-items-center bg-black/45"><div className="grid h-12 w-12 place-items-center rounded-full border border-white/18 bg-black/52 text-white/66 shadow-[0_0_24px_rgba(0,0,0,0.45)]"><Lock className="h-5 w-5" /></div></div>}</button>)}
+          {visibleCards.map((entry) => <SkillCodexCardButton entry={entry} key={entry.card.id} selected={selectedEntry?.card.id === entry.card.id} onSelect={selectCard} />)}
         </div>
       </Panel>
       {selectedEntry ? <SkillInspectPanel card={selectedEntry.card} copies={run.deck.filter((card) => card.name === selectedEntry.card.name).length} equipped={equippedIds.has(selectedEntry.card.id)} canEquip={canEquipMore} canUnequip={canUnequipMore} owned={selectedEntry.owned} source={selectedEntry.source} onEquip={() => onEquipSkill(selectedEntry.card.id)} onUnequip={() => onUnequipSkill(selectedEntry.card.id)} /> : null}
@@ -901,6 +911,17 @@ function DeckLabWindow({ roster, run, onEquipSkill, onUnequipSkill }: { roster: 
   owned: boolean;
   source: string;
 };
+
+const SkillCodexCardButton = memo(function SkillCodexCardButton({ entry, selected, onSelect }: { entry: SkillCodexEntry; selected: boolean; onSelect: (cardId: string) => void }) {
+  const handleSelect = useCallback(() => onSelect(entry.card.id), [entry.card.id, onSelect]);
+
+  return (
+    <button className={`relative overflow-hidden rounded-[14px] border text-left transition hover:-translate-y-0.5 hover:bg-white/[0.08] ${selected ? 'border-white/35 bg-white/[0.10]' : 'border-white/10 bg-black/18'} ${entry.owned ? 'shadow-[0_0_22px_rgba(255,255,255,0.08)]' : 'opacity-58 grayscale'}`} onClick={handleSelect} type="button">
+      <CardSummary card={entry.card} />
+      {entry.owned ? null : <div className="pointer-events-none absolute inset-0 grid place-items-center bg-black/45"><div className="grid h-12 w-12 place-items-center rounded-full border border-white/18 bg-black/52 text-white/66 shadow-[0_0_24px_rgba(0,0,0,0.45)]"><Lock className="h-5 w-5" /></div></div>}
+    </button>
+  );
+});
 
 function collectSkillCodex(roster: typeof runtimeRoster, collection: RuntimeCard[], fullPool: RuntimeCard[], deck: RuntimeCard[]): SkillCodexEntry[] {
   const byName = new Map<string, SkillCodexEntry>();
@@ -1526,16 +1547,18 @@ function CenterPanel({ combat, combatEffects, currentCharacter, currentProgress,
   const player = combat?.player;
   const playerHp = player ? `${player.hp} / ${player.maxHp}` : 'Ready';
   const enemyHp = selectedEnemy ? `${selectedEnemy.hp} / ${selectedEnemy.maxHp}` : 'Awaiting battle';
-  const visibleHand = hand.slice(0, 5);
-  const overflowHand = hand.slice(5);
-  const canPlayCard = (card: RuntimeCard) => Boolean(combat && combat.phase === 'player' && combat.energy >= card.energy_cost && livingEnemyCount > 0);
-  const playCardAndCloseOverflow = (card: RuntimeCard) => {
+  const visibleHand = useMemo(() => hand.slice(0, 5), [hand]);
+  const overflowHand = useMemo(() => hand.slice(5), [hand]);
+  const canPlayCard = useCallback((card: RuntimeCard) => Boolean(combat && combat.phase === 'player' && combat.energy >= card.energy_cost && livingEnemyCount > 0), [combat, livingEnemyCount]);
+  const playCardAndCloseOverflow = useCallback((card: RuntimeCard) => {
     if (!canPlayCard(card)) {
       return;
     }
     onPlayCard(card);
     setOverflowOpen(false);
-  };
+  }, [canPlayCard, onPlayCard]);
+  const closeOverflow = useCallback(() => setOverflowOpen(false), []);
+  const openOverflow = useCallback(() => setOverflowOpen(true), []);
 
   return (
     <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-[22px] bg-black/36 p-1.5 font-sans shadow-[inset_0_1px_1px_rgba(255,244,214,0.14),0_24px_80px_rgba(0,0,0,0.42),0_0_46px_rgba(218,199,150,0.12)]">
@@ -1578,14 +1601,14 @@ function CenterPanel({ combat, combatEffects, currentCharacter, currentProgress,
         </div>
         <div className="min-h-0 w-full z-30 flex flex-col justify-end items-center pb-1 relative overflow-visible">
           <div className="flex w-full items-end justify-center gap-2 overflow-visible px-2 pb-8">
-            {visibleHand.map((card, index) => <button className="disabled:cursor-not-allowed min-w-0 flex-shrink" disabled={!canPlayCard(card)} key={`${card.id}-${card.name}`} onClick={() => playCardAndCloseOverflow(card)}><CardItem card={card} compact={settingsCompact || hand.length > 5} disabled={!canPlayCard(card)} image={cardArt[index % cardArt.length]} /></button>)}
-            {overflowHand.length ? <button className="min-w-0 flex-shrink" onClick={() => setOverflowOpen(true)} type="button"><HandOverflowTile count={overflowHand.length} /></button> : null}
+            {visibleHand.map((card, index) => <HandCardButton card={card} compact={settingsCompact || hand.length > 5} disabled={!canPlayCard(card)} image={cardArt[index % cardArt.length]} key={`${card.id}-${card.name}`} onPlayCard={playCardAndCloseOverflow} />)}
+            {overflowHand.length ? <button className="min-w-0 flex-shrink" onClick={openOverflow} type="button"><HandOverflowTile count={overflowHand.length} /></button> : null}
           </div>
           <div className="absolute inset-x-0 bottom-0 w-full text-center pointer-events-none z-10"><p className="text-gray-400 text-sm tracking-widest uppercase">Play cards to use their effects.</p></div>
         </div>
       </div>
       {combat?.enemies.length ? <div className="absolute right-8 top-16 z-30 flex justify-end gap-2">{combat.enemies.map((enemy) => <button className={`border px-3 py-1 text-xs backdrop-blur-md transition ${enemy.id === selectedEnemyId ? 'border-white/35 bg-white/20 text-white shadow-[0_0_20px_rgba(255,255,255,0.16)]' : 'border-white/15 bg-black/35 text-white/65 hover:bg-white/10'}`} disabled={enemy.hp <= 0} key={enemy.id} onClick={() => onSelectEnemy(enemy.id)}>{enemy.name}</button>)}</div> : null}
-      {overflowOpen ? <HandOverflowOverlay cards={overflowHand} canPlayCard={canPlayCard} onClose={() => setOverflowOpen(false)} onPlayCard={playCardAndCloseOverflow} /> : null}
+      {overflowOpen ? <HandOverflowOverlay cards={overflowHand} canPlayCard={canPlayCard} onClose={closeOverflow} onPlayCard={playCardAndCloseOverflow} /> : null}
       {combat?.phase === 'won' ? <RewardOverlay recruits={recruitChoices} onRecruit={onRecruit} onSkip={onPrimaryAction} /> : null}
     </div>
   );
@@ -1617,28 +1640,62 @@ function LevelUpOverlay({ character, progress, onChoose }: { character: typeof r
   );
 }
 
-function CardRewardOverlay({ cards, onChoose, onSkip }: { cards: RuntimeCard[]; onChoose: (cardId: string) => void; onSkip: () => void }) {
+const CardRewardOverlay = memo(function CardRewardOverlay({ cards, onChoose, onSkip }: { cards: RewardCardPack[]; onChoose: (packId: string) => void; onSkip: () => void }) {
   return (
     <div className="absolute inset-0 z-[60] grid place-items-center bg-black/68 px-8 backdrop-blur-md">
       <div className="glass-panel w-full max-w-5xl p-5 text-white">
         <div className="mb-4 flex items-center justify-between gap-4">
           <div>
-            <span className="font-mono text-[10px] font-black uppercase tracking-[0.22em] text-white/45">Skill Booster</span>
-            <h3 className="font-serif text-3xl font-black">Choose a Skill Card</h3>
-            <p className="mt-1 text-sm font-semibold text-white/55">Add one card to your run deck, or skip to keep the deck lean.</p>
+            <span className="font-mono text-[10px] font-black uppercase tracking-[0.22em] text-white/45">Limited Skill Packs</span>
+            <h3 className="font-serif text-3xl font-black">Choose a Skill Pack</h3>
+            <p className="mt-1 text-sm font-semibold text-white/55">Pick one pack. Cards go to your collection first; equip only {MIN_DECK_SIZE}-{MAX_DECK_SIZE} in Deck Lab.</p>
           </div>
-          <button className="glass-button px-3 py-1 text-xs font-black" onClick={onSkip}>Skip</button>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full border border-white/12 bg-black/28 px-3 py-1 font-mono text-[10px] font-black uppercase tracking-[0.14em] text-white/50">max {MAX_REWARD_PACK_SIZE} cards</span>
+            <button className="glass-button px-3 py-1 text-xs font-black" onClick={onSkip}>Skip</button>
+          </div>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          {cards.map((card, index) => <button className="group rounded-[18px] border border-white/12 bg-white/[0.045] p-3 text-left transition hover:-translate-y-1 hover:bg-white/[0.08] active:translate-y-0" key={card.id} onClick={() => onChoose(card.id)} type="button">
-            <CardItem card={card} compact image={cardArt[(index + 2) % cardArt.length]} />
-            <div className="mt-3 rounded-[12px] border border-white/10 bg-black/24 px-3 py-2 text-center font-mono text-[10px] font-black uppercase tracking-[0.16em] text-white/70 transition group-hover:text-white">Add to Deck</div>
-          </button>)}
+          {cards.map((pack) => <CardRewardButton key={pack.id} pack={pack} onChoose={onChoose} />)}
         </div>
       </div>
     </div>
   );
-}
+});
+
+const CardRewardButton = memo(function CardRewardButton({ pack, onChoose }: { pack: RewardCardPack; onChoose: (packId: string) => void }) {
+  const choose = useCallback(() => onChoose(pack.id), [pack.id, onChoose]);
+  const theme = cardTypeTheme(pack.archetype);
+
+  return (
+    <button className={`group overflow-hidden rounded-[20px] border ${theme.border} bg-black/42 p-0 text-left shadow-[0_18px_60px_rgba(0,0,0,0.30)] transition hover:-translate-y-0.5 hover:bg-white/[0.07] active:translate-y-0`} onClick={choose} type="button">
+      <div className={`relative border-b border-white/10 bg-gradient-to-br ${theme.wash} p-4`}>
+        <div className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/35 px-2 py-1 font-mono text-[9px] font-black uppercase tracking-[0.14em] text-white/58">{pack.cards.length} cards</div>
+        <span className={`font-mono text-[9px] font-black uppercase tracking-[0.2em] ${theme.text}`}>{theme.label} pack</span>
+        <h4 className="mt-2 font-serif text-2xl font-black leading-tight text-white">{pack.name}</h4>
+        <p className="mt-1 min-h-[36px] text-xs font-semibold leading-relaxed text-white/58">{pack.description}</p>
+      </div>
+      <div className="space-y-2 p-3">
+        {pack.cards.map((card) => <PackCardPreview card={card} key={card.id} />)}
+        <div className="rounded-[12px] border border-white/10 bg-white/[0.07] px-3 py-2 text-center font-mono text-[10px] font-black uppercase tracking-[0.16em] text-white/70 transition group-hover:border-white/22 group-hover:text-white">Add Pack to Collection</div>
+      </div>
+    </button>
+  );
+});
+
+const PackCardPreview = memo(function PackCardPreview({ card }: { card: RuntimeCard }) {
+  const theme = cardTypeTheme(card.card_type);
+
+  return (
+    <div className="grid grid-cols-[1fr_auto] gap-2 rounded-[12px] border border-white/10 bg-black/24 p-2">
+      <div className="min-w-0">
+        <div className="truncate font-serif text-sm font-black text-white">{card.name}</div>
+        <div className={`font-mono text-[8px] font-black uppercase tracking-[0.14em] ${theme.text}`}>{theme.label} · {card.card_rarity}</div>
+      </div>
+      <span className={`grid h-8 w-8 place-items-center rounded-[9px] border ${theme.border} ${theme.badge} font-serif text-lg font-black ${theme.text}`}>{card.energy_cost}</span>
+    </div>
+  );
+});
 
 function majorUpgradeOptions(character: typeof runtimeRoster[number]): { stat: CharacterStatKey; amount: number }[] {
   const sortedStats = (Object.keys(character.stats) as CharacterStatKey[])
@@ -1841,23 +1898,33 @@ function GlassInfoBadge({ label, tone, value }: { label: string; tone: 'blue' | 
   );
 }
 
-function HandOverflowTile({ count }: { count: number }) {
+const HandCardButton = memo(function HandCardButton({ card, compact, disabled, image, onPlayCard }: { card: RuntimeCard; compact?: boolean; disabled: boolean; image: ReactNode; onPlayCard: (card: RuntimeCard) => void }) {
+  const play = useCallback(() => onPlayCard(card), [card, onPlayCard]);
+
   return (
-    <div className="relative flex h-[218px] w-[154px] items-center justify-center overflow-hidden rounded-[16px] border border-white/20 bg-black/68 shadow-[0_24px_70px_rgba(0,0,0,0.38),inset_0_1px_1px_rgba(255,255,255,0.12)] backdrop-blur-xl transition-transform duration-200 hover:z-20 hover:-translate-y-4 hover:bg-white/[0.10]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(255,244,214,0.18),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.10),rgba(0,0,0,0.24))]"></div>
+    <button className="disabled:cursor-not-allowed min-w-0 flex-shrink" disabled={disabled} onClick={play} type="button">
+      <HandCardItem card={card} compact={compact} disabled={disabled} image={image} />
+    </button>
+  );
+});
+
+const HandOverflowTile = memo(function HandOverflowTile({ count }: { count: number }) {
+  return (
+    <div className="relative flex h-[232px] w-[164px] items-center justify-center overflow-hidden rounded-[16px] border border-white/20 bg-black/68 shadow-[0_18px_44px_rgba(0,0,0,0.32),inset_0_1px_1px_rgba(255,255,255,0.12)] transition duration-150 hover:z-20 hover:-translate-y-1 hover:bg-white/[0.09]">
+      <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.10),rgba(0,0,0,0.24))]"></div>
       <div className="relative z-10 text-center">
-        <span className="block font-serif text-5xl font-black text-white drop-shadow-[0_4px_18px_rgba(0,0,0,0.65)]">+{count}</span>
+        <span className="block font-serif text-5xl font-black text-white drop-shadow-[0_3px_10px_rgba(0,0,0,0.55)]">+{count}</span>
         <span className="mt-2 block font-mono text-[10px] font-black uppercase tracking-[0.18em] text-white/62">cards</span>
         <span className="mt-4 block rounded-full border border-white/14 bg-white/[0.08] px-3 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-white/72">Open hand</span>
       </div>
     </div>
   );
-}
+});
 
-function HandOverflowOverlay({ cards, canPlayCard, onClose, onPlayCard }: { cards: RuntimeCard[]; canPlayCard: (card: RuntimeCard) => boolean; onClose: () => void; onPlayCard: (card: RuntimeCard) => void }) {
+const HandOverflowOverlay = memo(function HandOverflowOverlay({ cards, canPlayCard, onClose, onPlayCard }: { cards: RuntimeCard[]; canPlayCard: (card: RuntimeCard) => boolean; onClose: () => void; onPlayCard: (card: RuntimeCard) => void }) {
   return (
-    <div className="absolute inset-0 z-[70] grid place-items-center bg-black/68 p-6 backdrop-blur-md">
-      <section className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-[22px] border border-white/16 bg-black/72 text-white shadow-[0_28px_90px_rgba(0,0,0,0.48)]">
+    <div className="absolute inset-0 z-[70] grid place-items-center bg-black/68 p-6 backdrop-blur-sm">
+      <section className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-[22px] border border-white/16 bg-black/72 text-white shadow-[0_24px_70px_rgba(0,0,0,0.42)]">
         <header className="grid grid-cols-[1fr_auto] items-center border-b border-white/10 bg-white/[0.045] px-4 py-3">
           <div>
             <span className="font-mono text-[9px] font-black uppercase tracking-[0.22em] text-white/42">Overflow hand</span>
@@ -1867,10 +1934,44 @@ function HandOverflowOverlay({ cards, canPlayCard, onClose, onPlayCard }: { card
         </header>
         <div className="glass-scrollbar min-h-0 overflow-y-auto p-5">
           <div className="grid grid-cols-[repeat(auto-fit,minmax(154px,154px))] justify-center gap-3">
-            {cards.map((card, index) => <button className="disabled:cursor-not-allowed" disabled={!canPlayCard(card)} key={`${card.id}-${card.name}`} onClick={() => onPlayCard(card)} type="button"><CardItem card={card} compact disabled={!canPlayCard(card)} image={cardArt[(index + 5) % cardArt.length]} /></button>)}
+            {cards.map((card, index) => <HandCardButton card={card} compact disabled={!canPlayCard(card)} image={cardArt[(index + 5) % cardArt.length]} key={`${card.id}-${card.name}`} onPlayCard={onPlayCard} />)}
           </div>
         </div>
       </section>
+    </div>
+  );
+});
+
+function HandCardItem({ card, compact, image, disabled }: { card: RuntimeCard; compact?: boolean; image: ReactNode; disabled?: boolean }) {
+  const theme = cardTypeTheme(card.card_type);
+  const sizeClass = compact ? 'h-[232px] w-[164px]' : 'h-[252px] w-[180px]';
+
+  return (
+    <div className={`relative ${sizeClass} transition-transform duration-150 ${disabled ? 'translate-y-1 opacity-65' : 'z-10 cursor-pointer opacity-100 hover:z-20 hover:-translate-y-1'}`}>
+      <div className={`absolute inset-0 overflow-hidden rounded-[16px] border ${theme.border} bg-black/72 shadow-[0_14px_36px_rgba(0,0,0,0.30)]`}>
+        <div className={`absolute inset-0 bg-gradient-to-br ${theme.wash}`}></div>
+        <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 180 252" fill="none" preserveAspectRatio="none">
+          <rect x="6" y="6" width="168" height="240" rx="16" stroke={theme.primary} strokeOpacity="0.42" strokeWidth="1.2" />
+          <path d="M26 20H58M122 20H154M26 232H58M122 232H154" stroke={theme.secondary} strokeOpacity="0.48" strokeWidth="2" strokeLinecap="round" />
+          <path d="M90 8L105 18H75L90 8Z" fill={theme.dark} fillOpacity="0.72" stroke={theme.primary} strokeOpacity="0.52" />
+        </svg>
+        <div className="relative z-10 flex h-full flex-col p-3">
+          <div className={`mb-2 rounded-[10px] border ${theme.border} ${theme.badge} px-2 py-2 text-center`}>
+            <h3 className="truncate font-serif text-[15px] font-black leading-tight text-white">{card.name}</h3>
+            <span className={`font-mono text-[9px] font-black uppercase tracking-[0.18em] ${theme.text}`}>{theme.label}</span>
+          </div>
+          <div className={`relative mb-2 flex h-[66px] w-full flex-col items-center justify-center overflow-hidden rounded-[12px] border ${theme.border} bg-black/26`}>
+            <div className={`absolute inset-0 bg-gradient-to-br ${theme.wash} opacity-70`}></div>
+            <div className={`relative z-10 ${theme.text}`}>{image}</div>
+            <span className="absolute bottom-1 right-1 rounded-full border border-white/10 bg-black/42 px-1.5 py-0.5 font-mono text-[7px] font-black uppercase tracking-[0.12em] text-white/45">{theme.short}</span>
+          </div>
+          <div className="relative z-10 flex flex-1 items-center justify-center rounded-[12px] border border-white/10 bg-black/24 px-2 text-center">
+            <p className="line-clamp-4 text-[13px] font-bold leading-snug text-white/82">{card.mechanics_text}</p>
+          </div>
+        </div>
+      </div>
+      <div className={`absolute -left-1 -top-1 z-30 flex h-9 w-9 items-center justify-center rounded-[10px] border ${theme.border} ${theme.badge} shadow-[0_8px_20px_rgba(0,0,0,0.28)]`}><span className={`font-serif text-xl font-black ${theme.text}`}>{card.energy_cost}</span></div>
+      {disabled ? <div className="absolute inset-0 z-40 flex items-end justify-center rounded-[16px] bg-black/56 pb-4"><div className="pointer-events-none rounded-full border border-white/12 bg-black/78 px-3 py-1 text-xs font-semibold text-gray-200"><span>Not enough Energy</span></div></div> : null}
     </div>
   );
 }

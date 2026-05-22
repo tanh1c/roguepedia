@@ -9,6 +9,9 @@ export type CharacterStatKey = keyof CharacterStats;
 export const MAX_PARTY_SIZE = 6;
 export const MIN_DECK_SIZE = 8;
 export const MAX_DECK_SIZE = 24;
+export const REWARD_PACK_CHOICES = 3;
+export const REWARD_PACK_SIZE = 2;
+export const MAX_REWARD_PACK_SIZE = 3;
 
 export type CharacterProgress = {
   level: number;
@@ -39,6 +42,14 @@ export type ActiveSynergy = {
   description: string;
 };
 
+export type RewardCardPack = {
+  id: string;
+  name: string;
+  archetype: string;
+  description: string;
+  cards: RuntimeCard[];
+};
+
 export type RunState = {
   phase: RunPhase;
   map: RunNode[][];
@@ -53,7 +64,7 @@ export type RunState = {
   artifacts: RunArtifact[];
   activeSynergies: ActiveSynergy[];
   combat: CombatState | null;
-  pendingCardRewards: RuntimeCard[];
+  pendingCardRewards: RewardCardPack[];
   summary: string[];
   characterProgress: Record<string, CharacterProgress>;
   activeCharacterId: string;
@@ -69,8 +80,8 @@ export function createInitialRunState(starter: RuntimeCharacter): RunState {
     completedNodeIds: [],
     party: [starter],
     reserveRoster: [starter],
-    deck: [...starter.cards],
-    skillCollection: [...starter.cards],
+    deck: normalizeInitialDeck(starter.cards),
+    skillCollection: normalizeInitialDeck(starter.cards),
     activeCharacterId: starter.id,
     artifacts: [],
     activeSynergies: [],
@@ -210,46 +221,34 @@ export function applyMajorStatUpgrade(run: RunState, characterId: string, stat: 
   };
 }
 
-export function offerCardRewards(run: RunState, count = 3): RunState {
-  const ownedIds = new Set(run.deck.map((card) => card.id));
+export function offerCardRewards(run: RunState, packSize = REWARD_PACK_SIZE): RunState {
+  const ownedNames = new Set([...(run.skillCollection ?? run.deck), ...run.deck].map((card) => card.name));
   const candidates = [...run.party, ...run.reserveRoster]
     .flatMap((character) => character.cards)
-    .filter((card) => !ownedIds.has(card.id))
+    .filter((card) => !ownedNames.has(card.name))
     .sort((first, second) => rewardCardScore(second) - rewardCardScore(first) || first.name.localeCompare(second.name));
   const fallbackCandidates = run.party.flatMap((character) => character.cards).sort((first, second) => rewardCardScore(second) - rewardCardScore(first) || first.name.localeCompare(second.name));
-  const source = candidates.length >= count ? candidates : [...candidates, ...fallbackCandidates];
-  const selected: RuntimeCard[] = [];
-  const seenNames = new Set<string>();
-
-  for (const card of source) {
-    if (selected.length >= count) {
-      break;
-    }
-    if (seenNames.has(card.name)) {
-      continue;
-    }
-    seenNames.add(card.name);
-    selected.push(cloneRewardCard(card, run, selected.length));
-  }
+  const source = candidates.length >= REWARD_PACK_CHOICES * packSize ? candidates : [...candidates, ...fallbackCandidates];
+  const packs = buildRewardPacks(run, source, Math.min(packSize, MAX_REWARD_PACK_SIZE));
 
   return {
     ...run,
-    pendingCardRewards: selected,
-    summary: selected.length ? ['Discovered new skill cards.', ...run.summary] : run.summary,
+    pendingCardRewards: packs,
+    summary: packs.length ? ['Discovered skill card packs.', ...run.summary] : run.summary,
   };
 }
 
-export function claimCardReward(run: RunState, cardId: string): RunState {
-  const reward = run.pendingCardRewards.find((card) => card.id === cardId);
-  if (!reward) {
+export function claimCardReward(run: RunState, packId: string): RunState {
+  const pack = run.pendingCardRewards.find((rewardPack) => rewardPack.id === packId);
+  if (!pack) {
     return run;
   }
 
   return {
     ...run,
-    skillCollection: [...(run.skillCollection ?? run.deck), reward],
+    skillCollection: [...(run.skillCollection ?? run.deck), ...pack.cards],
     pendingCardRewards: [],
-    summary: [`Added ${reward.name} to the deck.`, ...run.summary],
+    summary: [`Added ${pack.name} cards to the collection.`, ...run.summary],
   };
 }
 
@@ -327,6 +326,18 @@ export function isNodeAvailable(run: RunState, node: RunNode): boolean {
   });
 }
 
+function normalizeInitialDeck(cards: RuntimeCard[]): RuntimeCard[] {
+  if (cards.length >= MIN_DECK_SIZE) {
+    return [...cards];
+  }
+
+  return Array.from({ length: MIN_DECK_SIZE }, (_, index) => ({
+    ...cards[index % cards.length],
+    id: `${cards[index % cards.length].id}-deck-${index}`,
+    mechanics: cards[index % cards.length].mechanics.map((mechanic) => ({ ...mechanic, amount: mechanic.amount ? { ...mechanic.amount } : mechanic.amount })),
+  }));
+}
+
 function gainPartyXp(party: RuntimeCharacter[], characterProgress: Record<string, CharacterProgress>, amount: number): { characterProgress: Record<string, CharacterProgress>; summary: string[] } {
   const summary: string[] = [];
   const nextProgress = { ...characterProgress };
@@ -386,13 +397,10 @@ function xpForNode(type: RunNodeType, depth: number): number {
 }
 
 function rewardCountForNode(type: RunNodeType): number {
-  if (type === 'boss') {
-    return 4;
+  if (type === 'boss' || type === 'elite') {
+    return MAX_REWARD_PACK_SIZE;
   }
-  if (type === 'elite') {
-    return 3;
-  }
-  return 3;
+  return REWARD_PACK_SIZE;
 }
 
 function advanceToNextAct(run: RunState): RunState {
@@ -413,10 +421,65 @@ function rewardCardScore(card: RuntimeCard): number {
   return (rarityScore[card.card_rarity] ?? 1) + mechanicScore - card.energy_cost;
 }
 
-function cloneRewardCard(card: RuntimeCard, run: RunState, index: number): RuntimeCard {
+function buildRewardPacks(run: RunState, source: RuntimeCard[], packSize: number): RewardCardPack[] {
+  const packs: RewardCardPack[] = [];
+  const usedNames = new Set<string>();
+
+  for (let packIndex = 0; packIndex < REWARD_PACK_CHOICES; packIndex += 1) {
+    const cards: RuntimeCard[] = [];
+    const preferredType = rewardPackTypes[packIndex % rewardPackTypes.length];
+    const sortedSource = [...source].sort((first, second) => Number(second.card_type === preferredType) - Number(first.card_type === preferredType) || rewardCardScore(second) - rewardCardScore(first) || first.name.localeCompare(second.name));
+
+    for (const card of sortedSource) {
+      if (cards.length >= packSize) {
+        break;
+      }
+      if (usedNames.has(card.name) || cards.some((selected) => selected.name === card.name)) {
+        continue;
+      }
+      usedNames.add(card.name);
+      cards.push(cloneRewardCard(card, run, packIndex, cards.length));
+    }
+
+    if (cards.length) {
+      packs.push(createRewardPack(run, packIndex, cards));
+    }
+  }
+
+  return packs;
+}
+
+const rewardPackTypes = ['attack', 'skill', 'power', 'utility', 'ultimate'];
+
+function createRewardPack(run: RunState, index: number, cards: RuntimeCard[]): RewardCardPack {
+  const dominantType = mostCommon(cards.map((card) => card.card_type));
+  const rarest = cards.reduce((best, card) => rewardCardScore(card) > rewardCardScore(best) ? card : best, cards[0]);
+  const names: Record<string, string> = {
+    attack: 'Assault Pack',
+    skill: 'Technique Pack',
+    power: 'Power Pack',
+    utility: 'Utility Pack',
+    ultimate: 'Mythic Pack',
+  };
+
+  return {
+    id: `pack-${run.completedNodeIds.length}-${index}`,
+    name: names[dominantType] ?? 'Skill Pack',
+    archetype: dominantType,
+    description: `${cards.length} cards · best pull: ${rarest.card_rarity} ${rarest.name}`,
+    cards,
+  };
+}
+
+function mostCommon(values: string[]): string {
+  const counts = values.reduce<Record<string, number>>((record, value) => ({ ...record, [value]: (record[value] ?? 0) + 1 }), {});
+  return Object.entries(counts).sort((first, second) => second[1] - first[1] || first[0].localeCompare(second[0]))[0]?.[0] ?? 'skill';
+}
+
+function cloneRewardCard(card: RuntimeCard, run: RunState, packIndex: number, cardIndex: number): RuntimeCard {
   return {
     ...card,
-    id: `${card.id}-reward-${run.completedNodeIds.length}-${index}`,
+    id: `${card.id}-reward-${run.completedNodeIds.length}-${packIndex}-${cardIndex}`,
     upgraded: false,
     mechanics: card.mechanics.map((mechanic) => ({ ...mechanic, amount: mechanic.amount ? { ...mechanic.amount } : mechanic.amount })),
   };

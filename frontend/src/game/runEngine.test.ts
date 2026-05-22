@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyArtifactReward, applySynergyRules } from './campaignContent';
-import { activeCharacter, applyMajorStatUpgrade, chooseNode, claimBattleReward, claimCardReward, completeNonBattleNode, createInitialRunState, effectiveStats, equipSkillCard, MAX_DECK_SIZE, MAX_PARTY_SIZE, MIN_DECK_SIZE, offerCardRewards, progressForCharacter, resetRun, retireRun, skipCardReward, switchActiveCharacter, unequipSkillCard, xpForNextLevel, type RunNodeType } from './runEngine';
+import { activeCharacter, applyMajorStatUpgrade, chooseNode, claimBattleReward, claimCardReward, completeNonBattleNode, createInitialRunState, effectiveStats, equipSkillCard, MAX_DECK_SIZE, MAX_PARTY_SIZE, MAX_REWARD_PACK_SIZE, MIN_DECK_SIZE, offerCardRewards, progressForCharacter, resetRun, retireRun, skipCardReward, switchActiveCharacter, unequipSkillCard, xpForNextLevel, type RunNodeType } from './runEngine';
 import { seedCharacter } from './seedData';
 import type { RuntimeCharacter } from './runtimeTypes';
 
@@ -24,8 +24,8 @@ describe('runEngine', () => {
     expect(run.party.map((character) => character.id)).toEqual([seedCharacter.id]);
     expect(run.activeCharacterId).toBe(seedCharacter.id);
     expect(activeCharacter(run).id).toBe(seedCharacter.id);
-    expect(run.deck).toHaveLength(seedCharacter.cards.length);
-    expect(run.skillCollection).toHaveLength(seedCharacter.cards.length);
+    expect(run.deck).toHaveLength(MIN_DECK_SIZE);
+    expect(run.skillCollection).toHaveLength(MIN_DECK_SIZE);
     expect(run.act).toBe(1);
     expect(run.depth).toBe(0);
     expect(run.map[0]).toHaveLength(3);
@@ -146,41 +146,44 @@ describe('runEngine', () => {
     expect(next.completedNodeIds).toContain('act-1-floor-1-battle-0');
     expect(next.party).toHaveLength(2);
     expect(next.reserveRoster).toHaveLength(0);
-    expect(next.deck).toHaveLength(seedCharacter.cards.length + recruit.cards.length);
+    expect(next.deck).toHaveLength(MIN_DECK_SIZE + recruit.cards.length);
     expect(next.pendingCardRewards).toHaveLength(3);
     expect(progressForCharacter(next, seedCharacter.id).xp).toBeGreaterThan(0);
     expect(next.characterProgress[recruit.id]).toBeDefined();
   });
 
-  it('offers unique card rewards from roster decks', () => {
+  it('offers unique limited card packs from roster decks', () => {
     const recruit = characterFixture('Q-recruit', 'Recruit');
     const run = { ...createInitialRunState(seedCharacter), reserveRoster: [recruit] };
 
     const rewarded = offerCardRewards(run);
+    const packCards = rewarded.pendingCardRewards.flatMap((pack) => pack.cards);
 
     expect(rewarded.pendingCardRewards).toHaveLength(3);
-    expect(new Set(rewarded.pendingCardRewards.map((card) => card.id)).size).toBe(3);
-    expect(rewarded.pendingCardRewards.every((card) => card.id.includes('-reward-'))).toBe(true);
+    expect(rewarded.pendingCardRewards.every((pack) => pack.cards.length <= MAX_REWARD_PACK_SIZE)).toBe(true);
+    expect(new Set(packCards.map((card) => card.id)).size).toBe(packCards.length);
+    expect(packCards.every((card) => card.id.includes('-reward-'))).toBe(true);
   });
 
-  it('claims or skips pending card rewards', () => {
+  it('claims or skips pending card packs', () => {
     const rewarded = offerCardRewards(createInitialRunState(seedCharacter));
-    const card = rewarded.pendingCardRewards[0];
+    const pack = rewarded.pendingCardRewards[0];
 
-    const claimed = claimCardReward(rewarded, card.id);
+    const claimed = claimCardReward(rewarded, pack.id);
     const skipped = skipCardReward(rewarded);
 
-    expect(claimed.skillCollection.some((deckCard) => deckCard.id === card.id)).toBe(true);
-    expect(claimed.deck.some((deckCard) => deckCard.id === card.id)).toBe(false);
+    expect(pack.cards.every((card) => claimed.skillCollection.some((deckCard) => deckCard.id === card.id))).toBe(true);
+    expect(pack.cards.every((card) => !claimed.deck.some((deckCard) => deckCard.id === card.id))).toBe(true);
     expect(claimed.pendingCardRewards).toEqual([]);
     expect(skipped.deck).toHaveLength(rewarded.deck.length);
     expect(skipped.pendingCardRewards).toEqual([]);
   });
 
-  it('equips reward skills into the active run deck for later battles', () => {
+  it('equips reward pack skills into the active run deck for later battles', () => {
     const rewarded = offerCardRewards(createInitialRunState(seedCharacter));
-    const reward = rewarded.pendingCardRewards[0];
-    const collected = claimCardReward(rewarded, reward.id);
+    const pack = rewarded.pendingCardRewards[0];
+    const reward = pack.cards[0];
+    const collected = claimCardReward(rewarded, pack.id);
 
     const equipped = equipSkillCard(collected, reward.id);
     const battle = chooseNode(equipped, 'act-1-floor-1-battle-0');
@@ -191,8 +194,9 @@ describe('runEngine', () => {
 
   it('unequips skills from the active run deck without deleting collection copies', () => {
     const rewarded = offerCardRewards(createInitialRunState(seedCharacter));
-    const reward = rewarded.pendingCardRewards[0];
-    const collected = claimCardReward(rewarded, reward.id);
+    const pack = rewarded.pendingCardRewards[0];
+    const reward = pack.cards[0];
+    const collected = claimCardReward(rewarded, pack.id);
     const equipped = equipSkillCard({ ...collected, deck: [...collected.deck, ...collected.deck] }, reward.id);
 
     const unequipped = unequipSkillCard(equipped, reward.id);
